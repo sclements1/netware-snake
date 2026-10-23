@@ -31,9 +31,9 @@ class ProductionPolicyTests(unittest.TestCase):
         self.assertNotIn('ImageIO',build)
 
     def test_faithful_is_fixed_and_vga_proportioned(self):
-        self.assertIn('mode==0,widescreen,size,&columns,&rows',SOURCE)
+        self.assertIn('mode!=1,widescreen,size,&columns,&rows',SOURCE)
         self.assertIn('nw_grid_metrics_for_mode(',SOURCE)
-        self.assertIn('_mode==0,&cw,&ch,&ox,&oy',SOURCE)
+        self.assertIn('_mode!=1,&cw,&ch,&ox,&oy',SOURCE)
         self.assertIn('double speed=mode==1?',SOURCE)
         self.assertIn('BOOL widescreen=mode==1',SOURCE)
         self.assertIn('BOOL demo=mode==1',SOURCE)
@@ -52,9 +52,9 @@ class ProductionPolicyTests(unittest.TestCase):
         for name in ('Info.plist','Info.preview.plist'):
             with (ROOT/'macos'/name).open('rb') as file:
                 info=plistlib.load(file)
-            self.assertEqual(info['CFBundleShortVersionString'],'0.3.0')
-            self.assertEqual(info['CFBundleVersion'],'12')
-        self.assertIn('0.3.0',(ROOT/'build-macos.sh').read_text())
-        self.assertIn('0.3.0',(ROOT/'install-macos.sh').read_text())
+            self.assertEqual(info['CFBundleShortVersionString'],'0.4.0')
+            self.assertEqual(info['CFBundleVersion'],'13')
+        self.assertIn('0.4.0',(ROOT/'build-macos.sh').read_text())
+        self.assertIn('0.4.0',(ROOT/'install-macos.sh').read_text())
 
 if __name__=='__main__': unittest.main()

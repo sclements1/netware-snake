@@ -18,11 +18,13 @@ SDK="$(xcrun --sdk macosx --show-sdk-path)"
 FLAGS=(-O2 -mmacosx-version-min=13.0 -isysroot "$SDK" -I "$PWD/core")
 xcrun clang "${FLAGS[@]}" -std=c11 -c core/nw_snake.c -o build/obj/nw_snake.o
 xcrun clang "${FLAGS[@]}" -std=c11 -c core/nw_geometry.c -o build/obj/nw_geometry.o
+xcrun clang "${FLAGS[@]}" -std=c11 -c core/nw4_snake.c -o build/obj/nw4_snake.o
+xcrun clang "${FLAGS[@]}" -std=c11 -c core/nw4_session.c -o build/obj/nw4_session.o
 xcrun clang "${FLAGS[@]}" -fobjc-arc -c macos/NWCPUReader.m -o build/obj/NWCPUReader.o
 xcrun clang "${FLAGS[@]}" -fobjc-arc -c macos/NetWareSnakeView.m -o build/obj/NetWareSnakeView.o
 mkdir -p "$BUNDLE/Contents/MacOS"
 xcrun clang -bundle -mmacosx-version-min=13.0 -isysroot "$SDK" \
-    build/obj/nw_snake.o build/obj/nw_geometry.o build/obj/NWCPUReader.o build/obj/NetWareSnakeView.o -o "$BUNDLE/Contents/MacOS/NetWareSnake" \
+    build/obj/nw_snake.o build/obj/nw_geometry.o build/obj/nw4_snake.o build/obj/nw4_session.o build/obj/NWCPUReader.o build/obj/NetWareSnakeView.o -o "$BUNDLE/Contents/MacOS/NetWareSnake" \
     -framework Cocoa -framework ScreenSaver -framework QuartzCore -lm
 cp macos/Info.plist "$BUNDLE/Contents/Info.plist"
 # Ad-hoc code signing suffices for local development; not notarized distribution.
@@ -32,16 +34,16 @@ codesign --force --sign - "$BUNDLE"
 mkdir -p "$APP/Contents/MacOS"
 xcrun clang "${FLAGS[@]}" -fobjc-arc -c macos/NWPreviewMain.m -o build/obj/NWPreviewMain.o
 xcrun clang -mmacosx-version-min=13.0 -isysroot "$SDK" \
-    build/obj/nw_snake.o build/obj/nw_geometry.o build/obj/NWCPUReader.o build/obj/NetWareSnakeView.o build/obj/NWPreviewMain.o -o "$APP/Contents/MacOS/NetWareSnakePreview" \
+    build/obj/nw_snake.o build/obj/nw_geometry.o build/obj/nw4_snake.o build/obj/nw4_session.o build/obj/NWCPUReader.o build/obj/NetWareSnakeView.o build/obj/NWPreviewMain.o -o "$APP/Contents/MacOS/NetWareSnakePreview" \
     -framework Cocoa -framework ScreenSaver -framework QuartzCore -lm
 cp macos/Info.preview.plist "$APP/Contents/Info.plist"
 codesign --force --sign - "$APP"
 # Fail the build unless both bundles contain their expected binaries and metadata.
 [[ -s "$BUNDLE/Contents/MacOS/NetWareSnake" ]]
 [[ -s "$APP/Contents/MacOS/NetWareSnakePreview" ]]
-[[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$BUNDLE/Contents/Info.plist")" == "0.3.0" ]]
-[[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$BUNDLE/Contents/Info.plist")" == "12" ]]
-[[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")" == "0.3.0" ]]
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$BUNDLE/Contents/Info.plist")" == "0.4.0" ]]
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$BUNDLE/Contents/Info.plist")" == "13" ]]
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")" == "0.4.0" ]]
 echo
 printf 'Built: %s\n' "$BUNDLE"
 printf 'To install safely after quitting System Settings: ./install-macos.sh\n'

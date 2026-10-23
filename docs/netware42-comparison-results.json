@@ -1,0 +1,75 @@
+{
+  "status": "PASS",
+  "total_passes": 38080,
+  "rng_outputs": 20000,
+  "results": [
+    {
+      "case": "20000 RNG outputs and complete random-state parity",
+      "passes": 0,
+      "seconds": 0.477
+    },
+    {
+      "case": "all percentage inputs 0..100, 160 passes each",
+      "passes": 16160,
+      "seconds": 7.386
+    },
+    {
+      "case": "long stable runs across all five bands and 100%",
+      "passes": 7200,
+      "seconds": 1.724
+    },
+    {
+      "case": "1 snakes, shuffled scheduling and changing per-CPU loads",
+      "passes": 160,
+      "seconds": 0.042
+    },
+    {
+      "case": "2 snakes, shuffled scheduling and changing per-CPU loads",
+      "passes": 320,
+      "seconds": 0.072
+    },
+    {
+      "case": "4 snakes, shuffled scheduling and changing per-CPU loads",
+      "passes": 640,
+      "seconds": 0.123
+    },
+    {
+      "case": "16 snakes, shuffled scheduling and changing per-CPU loads",
+      "passes": 2560,
+      "seconds": 0.472
+    },
+    {
+      "case": "32 snakes, shuffled scheduling and changing per-CPU loads",
+      "passes": 5120,
+      "seconds": 1.106
+    },
+    {
+      "case": "32 snakes, alternate screen-type branch",
+      "passes": 5120,
+      "seconds": 0.981
+    },
+    {
+      "case": "restart, palette reset and RNG continuity",
+      "passes": 800,
+      "seconds": 0.171
+    }
+  ],
+  "seconds": 12.554,
+  "comparison": [
+    "284-byte snake image after each pass",
+    "shared 118-byte RNG state after each pass",
+    "ordered attribute and character write events",
+    "entire 80x25 character and attribute framebuffer"
+  ],
+  "glyph_source": "actual SERVER table-copy and NWSNUT lookup routines",
+  "mocked_dependencies": [
+    "ReturnScreenType outputs",
+    "screen service effects"
+  ],
+  "excluded": [
+    "NetWare timer delay units",
+    "process startup/allocation path",
+    "real scheduler interleaving",
+    "packed-to-unpacked equivalence"
+  ]
+}

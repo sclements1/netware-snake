@@ -2,7 +2,7 @@
 
 ## Core is plain C11
 
-`nw_snake.h` and `nw_geometry.h` are the only headers a future platform adapter needs. No `Foundation`, `CoreGraphics`, Mach, AppKit, ScreenSaver, Swift, threading, or UI framework types are referenced by the engine. A Windows (`.scr`), Linux (Wayland/X11), or future macOS screen-saver host can link these two libraries directly.
+`nw_snake.h` and `nw_geometry.h` provide the 3.12 engine and shared geometry. `nw4_snake.h` and `nw4_session.h` add the 4.2 engine and CPU/staging policy. No `Foundation`, `CoreGraphics`, Mach, AppKit, ScreenSaver, Swift, threading, or UI framework types are referenced by the engine. A Windows (`.scr`), Linux (Wayland/X11), or future macOS screen-saver host can link these C11 sources directly.
 
 State ownership and main per-frame call:
 
@@ -35,9 +35,15 @@ The lightweight core means even unwanted active instances should be comparativel
 ## Explicitly postponed
 
 - Linux and Windows adapters.
-- CPU-core/cluster-specific multiple-snake layouts and scale to hundreds of cores.
+- More than 32 snakes and custom CPU/core/cluster layouts.
 - Metal, Direct3D, and advanced GPU pipelines.
 - Original VGA font ROM extraction or exact console DAC color reproduction.
-- Synchronization of snake *path* across separate physical displays (presently each display gets an independent path, using the same aggregate CPU feed).
+- Synchronization of snake *path* across separate physical displays (each display gets an independent console, sharing aggregate samples in 3.12 or per-CPU samples in 4.2).
 - Official Apple Developer ID signing/notarization for redistribution.
 
+
+## NetWare 4.2 adapter
+
+Create an `nw4_session`, start it with the host logical processor count and allow32 flag, and tick it at nominal 18.2 Hz with an array of integer percentages in processor enumeration order. Render both 80×25 planes: character AND foreground attribute. A shared destructive console cannot be reconstructed by overlaying independently drawn snakes. Keep the session between activations; `nw4_session_start` clears the console and palette while retaining shared RNG state. Stop advancing while the saver is inactive. Each independent display owns a session.
+
+The Mac sampler supplies 0..100 per logical CPU, cached for 0.5 seconds. Missing loads become zero and oversized adapter loads clamp to 100. The low-level verified engine instead rejects invalid percentages. Session ticks stagger first execution by 4*p intervals, then step each due CPU once in ascending index order. This is a documented modern ordering policy, not a reproduction of the NetWare kernel scheduler. Rendering/presentation may run at 30 Hz with an elapsed-time simulation accumulator. A 0.25-second elapsed-time cap prevents sleep/wake catch-up bursts.

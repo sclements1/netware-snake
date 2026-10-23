@@ -1,49 +1,45 @@
-# NetWare Snake for macOS v0.3.0 — lean historical screensaver
+# NetWare Snake for macOS v0.4.0
 
-A native macOS `.saver` and standalone preview, using the validated, portable NetWare 3.12 MONITOR.NLM snake simulation.
+A native macOS screensaver and standalone preview with separate NetWare 3.12 and NetWare 4.2 simulations.
 
-## What's in this build
+## Modes
 
-- **NetWare 3.12 Faithful:** fixed 80×25 characters, original simulation (~18.2 passes/second), red shaded trail, live aggregate CPU, historical crossing gaps. The display is presented within a uniformly scaled, centered **640×480 logical VGA viewport (4:3)**. The text raster occupies 640×400 virtual pixels (80 × 8 by 25 × 16), leaving 40 virtual black scanlines at the top and bottom of the viewport. On widescreen monitors there are additional black side margins. It never adopts Customizable mode's widescreen, size, speed, color or overlap settings.
-- **NetWare 3.12 Customizable:** same historical snake simulation, expanded text-grid widescreen support, selectable color with four CP437-like shading densities, three cell sizes, 0.5×–2× simulation speed, optional overlap protection, live CPU or a five-band demo sweep.
-- **Multiple displays:** independent snake instances per screen with shared aggregate CPU sampling.
-- **Diagnostics:** opt-in Apple unified logging; normal operation does not log animation frames or CPU samples.
-- **Options footer:** reads *version and build* from the bundle running the saver, not from ScreenSaverEngine.
+- **NetWare 4.2 Faithful:** one snake for each host logical CPU, capped at **31 by default**. Select **Allow up to 32 CPUs** to raise that cap to 32. A 16-CPU Mac gets 16 snakes with either setting; the option does not invent extra CPUs. Uses live utilization from each corresponding CPU, the recovered center origin, 15-color assignment cycle, shared random sequence, direction/boundary rules, five-stage trail, load-dependent history and original crossing erasures.
+- **NetWare 3.12 Faithful:** original single red snake, live aggregate CPU, fixed geometry and historical crossing gaps.
+- **NetWare 3.12 Customizable:** retains widescreen expansion, colors, character sizes, speed, crossing protection and demo load sweep.
 
-**Deliberately removed:** Eat the Desktop, wallpaper acquisition, bitmap decoding, erosion masks, related preferences and dependencies. Existing preferences from previous builds are ignored; upgrading doesn't modify wallpaper or delete user files.
+Both Faithful modes use an 80×25 grid in a centered, uniformly scaled 640×480 logical VGA viewport. The 640×400 text raster has 40 virtual blank scanlines above and below. Customizable settings do not alter either Faithful simulation. Each display is an independent console; CPU samples are shared within a host process.
+
+The 4.2 snakes start from column 38, row 12 (zero based), two characters wide, staggered by four simulation intervals per CPU. The nominal rate is 18.2 passes/second, supported by the supplied startup recording. CPU 31 first draws about 6.8 seconds after CPU 0. Their trails change length and motion with each CPU's utilization; they are not recolored copies of the 3.12 snake.
+
+Character codes DB/B2/B1/B0 and the erase space are verified against the supplied kernel and NWSNUT instructions. Rendering uses CP437-like density masks and conventional VGA RGB colors. Exact historical font-ROM pixels, DAC colors and scheduler jitter are not claimed. See [the 4.2 notes](docs/NETWARE42.md) for evidence and adaptation boundaries.
 
 ## Build, preview and install
 
-Requirements: macOS 13+, Apple Command Line Tools. These are source builds; they are not notarized for general distribution.
+Requires macOS 13+ and Apple Command Line Tools. Builds target the compiling Mac's architecture. Locally ad-hoc signed; not Developer ID signed or notarized.
 
-```bash
+```sh
 ./build-macos.sh
 open build/NetWareSnakePreview.app
 ```
 
-After checking the preview, fully quit System Settings, then:
+In the preview, press **Command-comma**, select **NetWare 4.2 Faithful**, then **Save**. The processor setting shows how many host CPUs will be represented. The original 3.12 selection remains the default for existing preferences.
 
-```bash
+After checking the preview, quit System Settings and run:
+
+```sh
 ./install-macos.sh
 ```
 
-The installer checks the build and version before replacing your current screensaver, and saves the previous one as `~/Library/Screen Savers/NetWareSnake.previous.saver`.
+The installer checks v0.4.0/build 13 before replacing the saver and backs up the prior one as `~/Library/Screen Savers/NetWareSnake.previous.saver`. Building alone does not install anything. Options displays the version/build of the actual loaded bundle. Diagnostics remain opt-in; normal operation logs no animation frames or CPU samples.
 
-If Options does nothing immediately after installation, quit and restart System Settings. On some macOS 26 releases, the screensaver host also retains prior instances; close Settings before installing.
+## Validation
 
-## What to verify on your Mac
-
-1. Faithful on 16:9 or ultrawide: red snake occupies a **centered 4:3 virtual picture**; no full-width expansion. The text grid is 80×25, the outer viewport is 640×480 logical units.
-2. Faithful remains fixed even after choosing Small, Widescreen and 2× in Customizable, then switching back.
-3. Customizable widescreen still expands the playfield; colors retain shading and Restore Defaults works.
-4. Options footer identifies `v0.3.0 · build 12`.
-5. Try multiple screens and the native screensaver thumbnail as well as the standalone preview.
-6. Compare CPU use with the high-cost wallpaper feature now absent.
-
-## Tests
-
-```bash
-python3 -m unittest discover -s tests -p 'test_*.py' -v
+```sh
+./tools/run-core-tests.sh       # portable tests, including existing 3.12 parity
+./tools/run-macos-tests.sh      # also Mach sampler fixtures, sanitizers, build/signatures
 ```
 
-The original historical C simulation in `core/nw_snake.c` is unchanged. The Mac build must still be verified on a Mac with Apple's SDK; the container only exercises portable C and static source tests.
+This release passed 21 regression tests, the native per-CPU sampling fixtures, 160,000 sanitized engine passes plus 20,000 session intervals, native compilation and signature verification. The integrated 4.2 engine also passed 38,080 differential passes against original MONITOR instructions, 20,000 RNG outputs, and 320 original worker passes. Original proprietary binaries are not distributed. The automated preview-launch inspection timed out on the build host, so the new settings sheet and animation still need visual confirmation on the user's Mac.
+
+Suggested visual check: select 4.2, save, watch the colors emerge from the center in sequence, and increase host CPU load. Check both 3.12 modes afterward. On hosts with 32 or more logical CPUs, compare 31 versus 32 with the checkbox. Confirm the footer reads **v0.4.0 · build 13**. If the system saver retains an old build, quit and reopen System Settings after installation.

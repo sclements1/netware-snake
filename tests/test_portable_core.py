@@ -161,7 +161,8 @@ class GeometryTests(unittest.TestCase):
         w=C.c_double();h=C.c_double();x=C.c_double();y=C.c_double()
         self.dll.nw_grid_metrics(1920,1080,80,25,C.byref(w),C.byref(h),C.byref(x),C.byref(y))
         self.assertAlmostEqual(2*w.value,h.value)
-        self.assertGreaterEqual(x.value,0);self.assertGreaterEqual(y.value,0)
+        # Allow floating-point roundoff at an exactly flush edge.
+        self.assertGreaterEqual(x.value,-1e-9);self.assertGreaterEqual(y.value,-1e-9)
         self.assertLessEqual(x.value+80*w.value,1920.00001)
         self.assertLessEqual(y.value+25*h.value,1080.00001)
 
