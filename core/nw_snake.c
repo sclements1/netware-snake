@@ -24,6 +24,7 @@ struct nw_snake {
     int cursors[STAGES], xs[H], ys[H], directions[H];
     uint8_t valid[H];
     uint8_t *raw, *protected_frame, *scratch_raw, *scratch_protected;
+    uint8_t *visited, *domain;
     uint32_t seed;
     uint64_t passes, moves, crossing_erasures;
     uint64_t generations[H], next_generation;
@@ -36,6 +37,24 @@ int nw_snake_load_band(int cpu) {
     return cpu<=11?1:cpu<=22?2:cpu<=33?3:cpu<=55?4:5;
 }
 static uint32_t rand_step(uint32_t seed) {return (seed+UINT32_C(1))*UINT32_C(10013);}
+static int pair_in_domain(const nw_snake *s, const uint8_t *domain, int x, int y) {
+    if (x<0 || x>=s->columns-1 || y<0 || y>=s->rows) return 0;
+    size_t pos=(size_t)y*(size_t)s->columns+(size_t)x;
+    return !domain || (domain[pos] && domain[pos+1]);
+}
+static int centered_pair(const nw_snake *s,const uint8_t *domain,int *x,int *y) {
+    if (!domain) {*x=(s->columns-2)/2;*y=(s->rows-1)/2;return 1;}
+    uint64_t best=UINT64_MAX;
+    int found=0;
+    for (int row=0;row<s->rows;row++) for (int col=0;col<s->columns-1;col++) {
+        if (!pair_in_domain(s,domain,col,row)) continue;
+        /* Twice the distance to the center avoids floating-point ties. */
+        int64_t a=(int64_t)2*col+2-s->columns,b=(int64_t)2*row+1-s->rows;
+        uint64_t distance=(uint64_t)(a*a+b*b);
+        if (distance<best) {best=distance;*x=col;*y=row;found=1;}
+    }
+    return found;
+}
 static void remove_gen(nw_snake *s, uint64_t gen) {
     if (!gen) return;
     for (int i=0;i<H;i++) if (s->active[i].alive && s->active[i].generation==gen) {
@@ -54,7 +73,7 @@ static void put_gen(nw_snake *s, uint64_t gen,int x,int y,int stage) {
     /* There are at most 51 live history generations. */
 }
 static void draw_pair(nw_snake *s,uint8_t *frame,int x,int y,uint8_t g) {
-    if (x<0 || x+1>=s->columns || y<0 || y>=s->rows) return;
+    if (!pair_in_domain(s,s->domain,x,y)) return;
     size_t pos=(size_t)y*(size_t)s->columns+(size_t)x;
     frame[pos]=g;frame[pos+1]=g;
 }
@@ -75,10 +94,9 @@ static void compose_protected(nw_snake *s) {
         previous=best;
     }
 }
-void nw_snake_reset(nw_snake *s,uint32_t seed) {
-    if (!s) return;
+static void reset_at(nw_snake *s,uint32_t seed,int x,int y) {
     s->seed=seed;s->passes=0;s->moves=0;s->crossing_erasures=0;
-    s->heading=2;s->x=38;s->y=12;s->phase=40*128;s->last_write=40;
+    s->heading=2;s->x=x;s->y=y;s->phase=40*128;s->last_write=40;
     const int initial[5]={40,30,20,10,0};
     memcpy(s->cursors,initial,sizeof initial);
     for (int i=0;i<H;i++) {s->xs[i]=255;s->ys[i]=255;s->directions[i]=255;s->valid[i]=0;s->generations[i]=0;}
@@ -87,22 +105,54 @@ void nw_snake_reset(nw_snake *s,uint32_t seed) {
     s->generations[40]=1;s->next_generation=2;
     memset(s->raw,0x20,(size_t)s->columns*(size_t)s->rows);
     memset(s->protected_frame,0x20,(size_t)s->columns*(size_t)s->rows);
+    memset(s->visited,0,(size_t)s->columns*(size_t)s->rows);
+}
+void nw_snake_reset(nw_snake *s,uint32_t seed) {
+    if (!s) return;
+    int x=38,y=12;
+    if (s->domain && !centered_pair(s,s->domain,&x,&y)) return;
+    reset_at(s,seed,x,y);
+}
+int nw_snake_recenter(nw_snake *s) {
+    if (!s) return 0;
+    int x=0,y=0;
+    if (!centered_pair(s,s->domain,&x,&y)) return 0;
+    reset_at(s,s->seed,x,y);
+    return 1;
+}
+int nw_snake_set_domain(nw_snake *s,const uint8_t *mask,size_t length) {
+    if (!s || (!mask && length)) return 0;
+    const size_t n=(size_t)s->columns*(size_t)s->rows;
+    if (mask && length!=n) return 0;
+    int x=0,y=0;
+    if (!centered_pair(s,mask,&x,&y)) return 0;
+    uint8_t *copy=NULL;
+    if (mask) {
+        copy=malloc(n);
+        if (!copy) return 0;
+        for (size_t i=0;i<n;i++) copy[i]=(uint8_t)(mask[i]!=0);
+    }
+    free(s->domain);s->domain=copy;
+    reset_at(s,s->seed,x,y);
+    return 1;
 }
 nw_snake *nw_snake_create(int columns,int rows,uint32_t seed) {
-    if (columns<40 || rows<14 || columns>512 || rows>160) return NULL;
+    if (columns<40 || rows<14 || columns>4096 || rows>2048) return NULL;
     nw_snake *s=calloc(1,sizeof *s);
     if (!s) return NULL;
     s->columns=columns;s->rows=rows;
     size_t n=(size_t)columns*(size_t)rows;
     s->raw=malloc(n);s->protected_frame=malloc(n);
     s->scratch_raw=malloc(n);s->scratch_protected=malloc(n);
-    if (!s->raw || !s->protected_frame || !s->scratch_raw || !s->scratch_protected) {nw_snake_destroy(s);return NULL;}
+    s->visited=malloc(n);
+    if (!s->raw || !s->protected_frame || !s->scratch_raw || !s->scratch_protected || !s->visited) {nw_snake_destroy(s);return NULL;}
     nw_snake_reset(s,seed);
     return s;
 }
 void nw_snake_destroy(nw_snake *s) {
     if (!s) return;
-    free(s->raw);free(s->protected_frame);free(s->scratch_raw);free(s->scratch_protected);free(s);
+    free(s->raw);free(s->protected_frame);free(s->scratch_raw);free(s->scratch_protected);
+    free(s->visited);free(s->domain);free(s);
 }
 unsigned nw_snake_advance(nw_snake *s,int cpu_percent) {
     if (!s) return 0;
@@ -116,25 +166,47 @@ unsigned nw_snake_advance(nw_snake *s,int cpu_percent) {
     memcpy(s->scratch_raw,s->raw,n);
     memcpy(s->scratch_protected,s->protected_frame,n);
     const uint64_t previous_moves=s->moves;
+    int placed=0,visited_changed=0;
     for (int stage=4;stage>=0;stage--) {
         const int cursor=s->cursors[stage];
         if (s->valid[cursor]) {
             draw_pair(s,s->raw,s->xs[cursor],s->ys[cursor],glyph[stage]);
             if (stage==0) {
+                if (pair_in_domain(s,s->domain,s->xs[cursor],s->ys[cursor])) {
+                    size_t p=(size_t)s->ys[cursor]*(size_t)s->columns+(size_t)s->xs[cursor];
+                    if (!s->visited[p] || !s->visited[p+1]) visited_changed=1;
+                    s->visited[p]=s->visited[p+1]=1;
+                }
                 const int original_reverse=(s->heading+4)%8;
-                int new_x=0,new_y=0;
-                for (int tries=0;tries<100000;tries++) {
+                int new_x=s->x,new_y=s->y,can_move=1;
+                int fallback=-1;
+                if (s->domain) {
+                    for (int direction=0;direction<8;direction++)
+                        if (direction!=original_reverse && pair_in_domain(s,s->domain,s->x+dx[direction],s->y+dy[direction])) {
+                            fallback=direction;break;
+                        }
+                    if (fallback<0) can_move=0;
+                }
+                for (int tries=0;can_move;tries++) {
                     new_x=s->x+dx[s->heading];new_y=s->y+dy[s->heading];
-                    if (new_x>=0 && new_x<=s->columns-2 && new_y>=0 && new_y<s->rows &&
+                    if (pair_in_domain(s,s->domain,new_x,new_y) &&
                         s->heading!=original_reverse) break;
+                    /* Irregular enhanced domains may have just one legal
+                       direction. Bound rejection work without changing any
+                       faithful rectangular RNG sequence. */
+                    if (s->domain && tries>=63) {
+                        s->heading=fallback;
+                        new_x=s->x+dx[fallback];new_y=s->y+dy[fallback];break;
+                    }
                     s->seed=rand_step(s->seed);
                     s->heading=retry_dir[(s->seed%47)%12];
                 }
-                s->x=new_x;s->y=new_y;s->moves++;
+                if (can_move) {s->x=new_x;s->y=new_y;s->moves++;}
                 const int d=1280/(((9*cpu_percent)/100)+1);
                 const int slot=(((d+s->phase)>>7)%H);
                 s->last_write=slot;
                 s->xs[slot]=s->x;s->ys[slot]=s->y;s->directions[slot]=s->heading;s->valid[slot]=1;
+                placed=1;
             }
             if (stage==4) {s->xs[cursor]=255;s->ys[cursor]=255;s->valid[cursor]=0;}
         }
@@ -162,7 +234,7 @@ unsigned nw_snake_advance(nw_snake *s,int cpu_percent) {
         } else put_gen(s,ev.generation,ev.x,ev.y,ev.stage);
     }
     const int moved=(s->moves!=previous_moves);
-    if (moved) {
+    if (placed) {
         const int slot=s->last_write;
         remove_gen(s,s->generations[slot]);
         s->generations[slot]=s->next_generation++;
@@ -172,9 +244,11 @@ unsigned nw_snake_advance(nw_snake *s,int cpu_percent) {
     if (memcmp(s->scratch_raw,s->raw,n)!=0)result|=NW_FRAME_CHANGED;
     if (memcmp(s->scratch_protected,s->protected_frame,n)!=0)result|=NW_PROTECTED_CHANGED;
     if (moved)result|=NW_HEAD_MOVED;
+    if (visited_changed)result|=NW_VISITED_CHANGED;
     return result;
 }
 const uint8_t *nw_snake_frame(const nw_snake *s,int protect) {return s?(protect?s->protected_frame:s->raw):NULL;}
+const uint8_t *nw_snake_visited(const nw_snake *s){return s?s->visited:NULL;}
 int nw_snake_columns(const nw_snake *s){return s?s->columns:0;}
 int nw_snake_rows(const nw_snake *s){return s?s->rows:0;}
 int nw_snake_x(const nw_snake *s){return s?s->x:0;}

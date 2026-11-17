@@ -1,24 +1,22 @@
 #import "NetWareSnakeView.h"
 #import "NWCPUReader.h"
+#import "NWSettings.h"
+#import "NWConfigurationController.h"
+#import "NWUnifiedDesktopSession.h"
+#import "NWWallpaperSnapshot.h"
 #import <Cocoa/Cocoa.h>
 #import <QuartzCore/QuartzCore.h>
-#import <ScreenSaver/ScreenSaver.h>
 #import <math.h>
-#import <stdlib.h>
-#import <stdint.h>
 #import <stdarg.h>
+#import <stdint.h>
 #import <os/log.h>
 #import "nw_snake.h"
 #import "nw_geometry.h"
 #import "nw4_session.h"
 
 static NSString * const NWModuleID=@"org.netwaresnake.mac.saver";
-static NSString * const NWBuildTag=@"0.4.0";
-static NSString * const NWChangedNotification=@"NWNetWareSnakePreferencesChanged";
+static NSString * const NWBuildTag=@"0.7.0";
 static const int NWBandDemo[9]={5,17,28,44,75,44,28,17,5};
-
-/* Apple unified logging: silent except for actionable errors unless diagnostics
-   are explicitly enabled. No per-frame, CPU-sample, or user-file-path logging. */
 static os_log_t NWLogHandle(void) {
     static os_log_t log;
     static dispatch_once_t once;
@@ -37,23 +35,6 @@ static void NWLogFailure(NSString *message) {
     os_log_error(NWLogHandle(), "%{public}@", message);
 }
 
-static NSString *NWColorHex(NSColor *input) {
-    NSColor *rgb=[input colorUsingColorSpace:[NSColorSpace deviceRGBColorSpace]];
-    if (!rgb)return @"#AA0000";
-    return [NSString stringWithFormat:@"#%02X%02X%02X",
-        (unsigned)lround(fmax(0,fmin(1,rgb.redComponent))*255),
-        (unsigned)lround(fmax(0,fmin(1,rgb.greenComponent))*255),
-        (unsigned)lround(fmax(0,fmin(1,rgb.blueComponent))*255)];
-}
-static void NWParseRGB(NSString *hex,uint8_t result[3]) {
-    unsigned value=0xAA0000;
-    if ([hex isKindOfClass:[NSString class]] && [hex length]==7 && [hex hasPrefix:@"#"]) {
-        unsigned parsed=0;
-        NSScanner *scanner=[NSScanner scannerWithString:[hex substringFromIndex:1]];
-        if ([scanner scanHexInt:&parsed] && [scanner isAtEnd]) value=parsed;
-    }
-    result[0]=(uint8_t)(value>>16);result[1]=(uint8_t)(value>>8);result[2]=(uint8_t)value;
-}
 static BOOL NWBitmapPixel(uint8_t glyph,int x,int y) {
     if (glyph==0xdb)return YES;
     if (glyph==0xb2)return (x%2==0 || y%2==0);
@@ -61,80 +42,75 @@ static BOOL NWBitmapPixel(uint8_t glyph,int x,int y) {
     if (glyph==0xb0)return (x%2==0 && y%2==0);
     return NO;
 }
+static unsigned NWProcessorCountForSettings(NWSettings *settings) {
+    if(settings.cpuPolicy==NWCPUFixed32)return 32;
+    return nw4_processor_count((unsigned)[[NWCPUReader sharedReader] hostProcessorCount],
+        settings.cpuPolicy==NWCPUDetected32);
+}
+
 
 @interface NetWareSnakeView ()
 - (void)applyPreferences;
-- (void)onSettingsChanged:(NSNotification *)notification;
 @end
 @implementation NetWareSnakeView {
     nw_snake *_core;
     nw4_session *_smp;
-    CGImageRef _smpImages[16][4];
-    BOOL _allow32, _reportedSMPFailure;
-    CGImageRef _shadeImages[4];
+    NWUnifiedDesktopSession *_unified;
+    NWSettings *_settings;
+    NWWallpaperSnapshot *_wallpaper;
+    NSNumber *_wallpaperDisplay;
+    CGImageRef _shadeImages[4],_smpImages[16][4];
     uint8_t _lastColor[3];
     uint32_t _initialSeed;
-    int _columns, _rows, _mode, _size;
-    BOOL _widescreen, _overlap, _demo, _diagnostics;
-    BOOL _reportedCoreFailure;
-    double _speed;
-    CFTimeInterval _lastFrameTime, _startTime, _lastPrefsRead;
+    int _columns,_rows;
+    BOOL _running,_diagnostics,_reportedCoreFailure,_reportedSMPFailure;
     double _accumulator;
-    BOOL _firstPrefs;
-    ScreenSaverDefaults *_defaults;
-    NSPanel *_panel;
-    NSPopUpButton *_modePopup,*_sizePopup,*_speedPopup,*_sourcePopup;
-    NSButton *_wideBox,*_overlapBox,*_resetButton,*_diagnosticsBox;
-    NSColorWell *_colorWell;
-    NSButton *_allow32Box;
-    NSTextField *_cpuCountLabel;
+    CFTimeInterval _lastFrameTime,_startTime,_lastPrefsRead;
+    uint64_t _lastUnifiedRevision;
+    NSUserDefaults *_defaults;
+    NWConfigurationController *_configuration;
 }
-- (instancetype)initWithFrame:(NSRect)frame isPreview:(BOOL)isPreview {
-    self=[super initWithFrame:frame isPreview:isPreview];
+- (instancetype)initWithFrame:(NSRect)frame isPreview:(BOOL)preview {
+    return [self initWithFrame:frame isPreview:preview defaults:nil];
+}
+- (instancetype)initWithFrame:(NSRect)frame isPreview:(BOOL)preview defaults:(NSUserDefaults *)defaults {
+    self=[super initWithFrame:frame isPreview:preview];
     if(self) {
-        self.animationTimeInterval=1.0/30.0; // presentation tick; simulation remains 18.2 Hz
-        _initialSeed=arc4random() ^ (uint32_t)(uintptr_t)self;
-        _defaults=[ScreenSaverDefaults defaultsForModuleWithName:NWModuleID];
-        [_defaults registerDefaults:@{@"mode":@0,@"wide":@YES,@"color":@"#AA0000",
-            @"size":@1,@"speed":@1.0,@"overlap":@NO,@"demo":@NO,
-            @"diagnostics":@NO,@"allow32":@NO}];
-        [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(onSettingsChanged:)
-               name:NWChangedNotification object:nil];
-        _lastColor[0]=_lastColor[1]=_lastColor[2]=0xff;
-        _startTime=CACurrentMediaTime();
-        [self applyPreferences];
-        NWLogDiagnostic(_diagnostics,@"INIT build=%@ preview=%d size=%.0fx%.0f",
-                        NWBuildTag,isPreview,frame.size.width,frame.size.height);
+        self.animationTimeInterval=1.0/30.0;
+        _initialSeed=arc4random()^(uint32_t)(uintptr_t)self;
+        _defaults=defaults?:[ScreenSaverDefaults defaultsForModuleWithName:NWModuleID];
+        memset(_lastColor,255,sizeof _lastColor);
+        [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(settingsChanged:)
+            name:NWSettingsDidChangeNotification object:nil];
+        [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(screensChanged:)
+            name:NSApplicationDidChangeScreenParametersNotification object:nil];
+        _startTime=CACurrentMediaTime();[self applyPreferences];
+        NWLogDiagnostic(_diagnostics,@"INIT build=%@ preview=%d",NWBuildTag,preview);
     }
     return self;
 }
 - (void)dealloc {
     [[NSNotificationCenter defaultCenter] removeObserver:self];
-    nw_snake_destroy(_core);
-    nw4_session_destroy(_smp);
-    for(int c=0;c<16;c++)for(int i=0;i<4;i++)
-        if(_smpImages[c][i])CGImageRelease(_smpImages[c][i]);
+    [_unified detachParticipant:self];
+    nw_snake_destroy(_core);nw4_session_destroy(_smp);
     for(int i=0;i<4;i++)if(_shadeImages[i])CGImageRelease(_shadeImages[i]);
+    for(int c=0;c<16;c++)for(int i=0;i<4;i++)if(_smpImages[c][i])CGImageRelease(_smpImages[c][i]);
 }
 - (BOOL)isFlipped {return YES;}
-- (void)setFrameSize:(NSSize)newSize {
-    [super setFrameSize:newSize];
+- (void)setFrameSize:(NSSize)size {
+    [super setFrameSize:size];
     if(_defaults)[self applyPreferences];
-    /* Grid count can stay 80x25 even when the host resizes the view.
-       Repaint so the centered VGA viewport gets its new letterboxing. */
     [self setNeedsDisplay:YES];
 }
-/* View attachment is informational; the rendering geometry is derived
-   solely from bounds and the selected mode, never the host monitor size. */
 - (void)viewDidMoveToWindow {
     [super viewDidMoveToWindow];
-    NWLogDiagnostic(_diagnostics,@"ATTACH display=%@ attached=%d",
-                    self.window.screen.deviceDescription[@"NSScreenNumber"],self.window!=nil);
+    if(_defaults && self.window)[self applyPreferences];
 }
-- (void)onSettingsChanged:(NSNotification *)notification {
-    (void)notification;
-    [_defaults synchronize];
-    [self applyPreferences];
+- (void)settingsChanged:(NSNotification *)note {
+    (void)note;[_defaults synchronize];[self applyPreferences];
+}
+- (void)screensChanged:(NSNotification *)note {
+    (void)note;_wallpaper=nil;_wallpaperDisplay=nil;[self applyPreferences];
 }
 - (void)rebuildGlyphImagesForColor:(const uint8_t *)color {
     if(memcmp(color,_lastColor,3)==0 && _shadeImages[0])return;
@@ -179,312 +155,259 @@ static BOOL NWBitmapPixel(uint8_t glyph,int x,int y) {
     }
     CGColorSpaceRelease(space);
 }
+
 - (void)startSMPSession {
-    if(!_smp)_smp=nw4_session_create();
-    if(!_smp || !nw4_session_start(_smp,(unsigned)[[NWCPUReader sharedReader] hostProcessorCount],_allow32)) {
+    if(!_smp || nw4_session_columns(_smp)!=_columns || nw4_session_rows(_smp)!=_rows) {
+        nw4_session *fresh=nw4_session_create_grid(_columns,_rows);
+        if(fresh){nw4_session_destroy(_smp);_smp=fresh;}
+        else {
+            if(!_reportedSMPFailure)NWLogFailure(@"Failed to allocate NetWare 4.2 simulation state");
+            _reportedSMPFailure=YES;return;
+        }
+    }
+    if(!nw4_session_start_configured(_smp,NWProcessorCountForSettings(_settings),(unsigned)_settings.colorStart)) {
         if(!_reportedSMPFailure)NWLogFailure(@"Failed to allocate NetWare 4.2 simulation state");
         _reportedSMPFailure=YES;return;
     }
-    _reportedSMPFailure=NO;_accumulator=0;
+    _reportedSMPFailure=NO;_accumulator=0;_startTime=CACurrentMediaTime();
     [self buildSMPGlyphImages];[self setNeedsDisplay:YES];
 }
+- (void)captureWallpaperIfNeeded {
+    if(!_running || !_settings.eatDesktop || _settings.screenMode==NWScreenModeUnifiedDesktop)return;
+    NSScreen *screen=self.window.screen?:NSScreen.screens.firstObject;
+    NSNumber *display=screen.deviceDescription[@"NSScreenNumber"];
+    if(!_wallpaper || ![_wallpaperDisplay isEqual:display]) {
+        _wallpaper=screen?[NWWallpaperSnapshot snapshotForScreen:screen]:nil;
+        _wallpaperDisplay=display;
+    }
+}
 - (void)applyPreferences {
-    BOOL first=!_firstPrefs;
-    _firstPrefs=YES;
-    int mode=(int)[_defaults integerForKey:@"mode"];
-    if(mode<0 || mode>2)mode=0;
-    BOOL enteringSMP=(mode==2 && (first || _mode!=2));
-    BOOL allow32=[_defaults boolForKey:@"allow32"];
-    int size=(int)[_defaults integerForKey:@"size"];
-    if(size<0||size>2)size=1;
-    /* Faithful mode never inherits configurable geometry or presentation
-       preferences, even if those preferences remain stored from earlier runs. */
-    BOOL widescreen=mode==1 && [_defaults boolForKey:@"wide"];
-    BOOL overlap=mode==1 && [_defaults boolForKey:@"overlap"];
-    BOOL demo=mode==1 && [_defaults boolForKey:@"demo"];
-    BOOL diagnostics=[_defaults boolForKey:@"diagnostics"];
-    double speed=mode==1?[_defaults doubleForKey:@"speed"]:1.0;
-    if(speed<0.5||speed>2.0)speed=1.0;
-    uint8_t color[3];
-    NWParseRGB(mode!=1?@"#AA0000":[_defaults stringForKey:@"color"],color);
-    BOOL colorChanged=memcmp(color,_lastColor,3)!=0;
-    NSSize viewSize=self.bounds.size;
-    int columns=80,rows=25;
-    nw_grid_for_view(viewSize.width,viewSize.height,mode!=1,widescreen,size,&columns,&rows);
-    BOOL geometryChanged=(first || !_core || columns!=_columns || rows!=_rows);
-    BOOL changed=first || geometryChanged || mode!=_mode || size!=_size ||
-                 widescreen!=_widescreen || overlap!=_overlap || demo!=_demo ||
-                 speed!=_speed || colorChanged;
-    BOOL logStateChanged=(first || diagnostics!=_diagnostics);
-    _mode=mode;_size=size;_widescreen=widescreen;_overlap=overlap;_demo=demo;_speed=speed;
-    _diagnostics=diagnostics;_allow32=allow32;
-    if(mode==2 && (enteringSMP || !_smp || nw4_session_processors(_smp)!=
-        nw4_processor_count((unsigned)[[NWCPUReader sharedReader] hostProcessorCount],allow32)))
-        [self startSMPSession];
-    if (logStateChanged && !first)
-        NWLogDiagnostic(_diagnostics,@"DIAGNOSTICS enabled");
-    if (changed)
-        NWLogDiagnostic(_diagnostics,@"PREFS mode=%d grid=%dx%d demo=%d overlap=%d speed=%.2f",
-                        mode,columns,rows,demo,overlap,speed);
-    if(geometryChanged) {
-        nw_snake *newCore=nw_snake_create(columns,rows,_initialSeed);
-        if(newCore) {
-            nw_snake_destroy(_core);_core=newCore;_columns=columns;_rows=rows;_accumulator=0;
-            _reportedCoreFailure=NO;
-        } else if (!_reportedCoreFailure) {
-            NWLogFailure(@"Failed to allocate snake simulation state");
-            _reportedCoreFailure=YES;
+    NWSettings *next=[NWSettings settingsWithDefaults:_defaults];
+    NWSettings *previous=_settings;
+    BOOL first=previous==nil,modeChanged=first || previous.mode!=next.mode;
+    BOOL eatChanged=first || previous.eatDesktop!=next.eatDesktop;
+    BOOL screenChanged=first || previous.screenMode!=next.screenMode;
+    if(eatChanged || modeChanged || screenChanged){_wallpaper=nil;_wallpaperDisplay=nil;}
+    _settings=next;_diagnostics=next.diagnostics;
+    if(next.screenMode!=NWScreenModeUnifiedDesktop || !_running) {
+        [_unified detachParticipant:self];_unified=nil;_lastUnifiedRevision=0;
+    } else {
+        NWUnifiedDesktopSession *world=[NWUnifiedDesktopSession acquireForSettings:next participant:self];
+        if(_unified!=world) {
+            [_unified detachParticipant:self];_unified=world;_lastUnifiedRevision=0;
+        }
+        if(!_unified && !_reportedCoreFailure) {
+            NWLogFailure(@"Failed to allocate unified desktop simulation");_reportedCoreFailure=YES;
         }
     }
-    if (colorChanged || first) [self rebuildGlyphImagesForColor:color];
-    if (changed)[self setNeedsDisplay:YES];
+    if(next.screenMode!=NWScreenModeUnifiedDesktop) {
+        int columns=80,rows=25;
+        if(next.screenMode==NWScreenModeFourThirds) {
+            // Multiples of five keep the VGA raster at 8:16 in every size.
+            rows=next.size==0?35:next.size==2?20:25;columns=rows*16/5;
+        } else {
+            rows=next.size==0?34:next.size==2?18:25;
+            double ratio=self.bounds.size.height>0?self.bounds.size.width/self.bounds.size.height:1.6;
+            columns=MAX(40,MIN(4096,(int)floor(ratio*rows*2.0)));
+        }
+        _columns=columns;_rows=rows;
+        if(next.mode==NWModeNetWare42) {
+            if(!_smp || nw4_session_columns(_smp)!=columns || nw4_session_rows(_smp)!=rows ||
+               modeChanged || screenChanged || eatChanged || previous.cpuPolicy!=next.cpuPolicy ||
+               previous.colorStart!=next.colorStart || nw4_session_processors(_smp)!=NWProcessorCountForSettings(next))
+                [self startSMPSession];
+        } else if(!_core || columns!=nw_snake_columns(_core) || rows!=nw_snake_rows(_core) ||
+                  modeChanged || screenChanged || eatChanged) {
+            nw_snake *fresh=nw_snake_create(columns,rows,_initialSeed);
+            if(fresh) {
+                if(columns!=80 || rows!=25)nw_snake_recenter(fresh);
+                nw_snake_destroy(_core);_core=fresh;
+                _columns=columns;_rows=rows;_accumulator=0;_reportedCoreFailure=NO;
+                _startTime=CACurrentMediaTime();
+            } else if(!_reportedCoreFailure) {
+                NWLogFailure(@"Failed to allocate NetWare 3.12 simulation state");_reportedCoreFailure=YES;
+            }
+        }
+    }
+    if(!first && (previous.demo!=next.demo || previous.speed!=next.speed)) {
+        _lastFrameTime=_startTime=CACurrentMediaTime();_accumulator=0;
+    }
+    unsigned rgb=0xaa0000;
+    NSScanner *scanner=[NSScanner scannerWithString:[next.colorHex substringFromIndex:1]];
+    [scanner scanHexInt:&rgb];
+    const uint8_t color[3]={(uint8_t)(rgb>>16),(uint8_t)(rgb>>8),(uint8_t)rgb};
+    [self rebuildGlyphImagesForColor:color];
+    if(next.mode!=NWModeNetWare312)[self buildSMPGlyphImages];
+    [self captureWallpaperIfNeeded];[self setNeedsDisplay:YES];
 }
 - (void)startAnimation {
-    NWLogDiagnostic(_diagnostics,@"START build=%@ mode=%d grid=%dx%d display=%@",
-                    NWBuildTag,_mode,_columns,_rows,
-                    self.window.screen.deviceDescription[@"NSScreenNumber"]);
-    _lastFrameTime=CACurrentMediaTime();
-    _startTime=_lastFrameTime;
-    _accumulator=0;
-    if(_mode==2 && _smp && nw4_session_intervals(_smp)>0)[self startSMPSession];
+    _running=YES;_lastFrameTime=_startTime=CACurrentMediaTime();_accumulator=0;
+    _wallpaper=nil;_wallpaperDisplay=nil;
+    if(_core) {
+        nw_snake_reset(_core,_initialSeed);
+        if(nw_snake_columns(_core)!=80 || nw_snake_rows(_core)!=25)nw_snake_recenter(_core);
+    }
+    [self applyPreferences];
+    if(_settings.mode==NWModeNetWare42 && _settings.screenMode!=NWScreenModeUnifiedDesktop &&
+       _smp && nw4_session_intervals(_smp)>0)[self startSMPSession];
+    NWLogDiagnostic(_diagnostics,@"START build=%@ mode=%ld",NWBuildTag,(long)_settings.mode);
     [super startAnimation];
 }
 - (void)stopAnimation {
     NWLogDiagnostic(_diagnostics,@"STOP build=%@",NWBuildTag);
-    [super stopAnimation];
-    _lastFrameTime=0;
+    [super stopAnimation];_running=NO;_lastFrameTime=0;
+    [_unified detachParticipant:self];_unified=nil;_wallpaper=nil;_wallpaperDisplay=nil;
 }
 - (void)animateOneFrame {
-    /* Important on recent macOS: do no work for a view no longer attached
-       to a window. Host lifecycle issues remain outside plug-in control. */
-    if (!self.window || [self isHiddenOrHasHiddenAncestor])return;
-    const CFTimeInterval now=CACurrentMediaTime();
-    if(now-_lastPrefsRead>2.0) {
-        _lastPrefsRead=now;
-        [_defaults synchronize];
-        [self applyPreferences];
+    if(!self.window || [self isHiddenOrHasHiddenAncestor])return;
+    CFTimeInterval now=CACurrentMediaTime();
+    if(now-_lastPrefsRead>2) {
+        _lastPrefsRead=now;[_defaults synchronize];[self applyPreferences];
     }
-    if(!_core)return;
+    if(_settings.screenMode==NWScreenModeUnifiedDesktop) {
+        [_unified advanceAtTime:now];
+        if(_lastUnifiedRevision!=_unified.revision) {
+            _lastUnifiedRevision=_unified.revision;[self setNeedsDisplay:YES];
+        }
+        return;
+    }
     if(!_lastFrameTime){_lastFrameTime=now;return;}
-    double dt=now-_lastFrameTime;_lastFrameTime=now;
-    if(dt<0)dt=0;
-    if(dt>0.25)dt=0.25; // no burst after machine sleep or delayed UI
-    _accumulator+=dt*_speed*(double)NW_SNAKE_HZ_NUM/(double)NW_SNAKE_HZ_DEN;
-    unsigned processorLoads[32]={0};
-    if(_mode==2) {
-        NSArray<NSNumber *> *loads=[[NWCPUReader sharedReader] processorUsagesAtTime:now];
-        unsigned count=nw4_processor_count((unsigned)loads.count,_allow32);
-        if(!_smp || count!=nw4_session_processors(_smp))[self startSMPSession];
-        for(NSUInteger p=0;p<MIN((NSUInteger)32,loads.count);p++)
-            processorLoads[p]=(unsigned)lround(fmax(0,fmin(100,loads[p].doubleValue)));
-    }
-    int cpu=0;
-    if(_mode==2) { /* Per-processor sampling above replaces aggregate load. */ }
-    else if(_demo) {
-        int stage=(int)floor((now-_startTime)/5.0)%9;
-        cpu=NWBandDemo[stage<0?0:stage];
+    double dt=fmax(0,fmin(0.25,now-_lastFrameTime));_lastFrameTime=now;
+    BOOL smp=_settings.mode==NWModeNetWare42;
+    _accumulator+=dt*_settings.speed*18.2;
+    unsigned loads[32]={0};int cpu=0;
+    if(smp) {
+        if(!_smp || nw4_session_processors(_smp)!=NWProcessorCountForSettings(_settings))
+            [self startSMPSession];
+        if(_settings.cpuPolicy==NWCPUFixed32 || _settings.demo) {
+            NSUInteger step=(NSUInteger)fmax(0,floor((now-_startTime)/5.0));
+            for(NSUInteger p=0;p<32;p++)loads[p]=NWBandDemo[(step+p)%9];
+        } else {
+            NSArray<NSNumber *> *values=[[NWCPUReader sharedReader] processorUsagesAtTime:now];
+            for(NSUInteger p=0;p<MIN((NSUInteger)32,values.count);p++)
+                loads[p]=(unsigned)lround(fmax(0,fmin(100,values[p].doubleValue)));
+        }
+    } else if(_settings.demo) {
+        NSUInteger index=(NSUInteger)fmax(0,floor((now-_startTime)/5.0))%9;cpu=NWBandDemo[index];
     } else cpu=(int)lround([[NWCPUReader sharedReader] aggregateUsageAtTime:now]);
     BOOL redraw=NO;
-    for(int n=0;_accumulator>=1.0 && n<8;n++) {
-        if(_mode==2) {
-            if(nw4_session_tick(_smp,processorLoads,32))redraw=YES;
-        } else {
-            unsigned changed=nw_snake_advance(_core,cpu);
-            if(changed & (_overlap?NW_PROTECTED_CHANGED:NW_FRAME_CHANGED))redraw=YES;
+    for(int n=0;_accumulator>=1 && n<8;n++) {
+        if(smp) {if(nw4_session_tick(_smp,loads,32))redraw=YES;}
+        else if(_core) {
+            unsigned flags=nw_snake_advance(_core,cpu);
+            if((flags&(_settings.resolveGaps?NW_PROTECTED_CHANGED:NW_FRAME_CHANGED)) ||
+               (_settings.eatDesktop && (flags&NW_VISITED_CHANGED)))redraw=YES;
         }
-        _accumulator-=1.0;
+        _accumulator-=1;
     }
-    if(_accumulator>8.0)_accumulator=0; // safe bound, no runaway catchup
+    if(_accumulator>8)_accumulator=0;
     if(redraw)[self setNeedsDisplay:YES];
 }
-- (void)drawRect:(NSRect)dirtyRect {
-    (void)dirtyRect;
-    CGContextRef ctx=NSGraphicsContext.currentContext.CGContext;
-    if(!ctx)return;
-    const NSRect bounds=self.bounds;
-    CGContextSetRGBFillColor(ctx,0,0,0,1);
-    CGContextFillRect(ctx,NSRectToCGRect(bounds));
-    if(!_core)return;
-    double cw=0,ch=0,ox=0,oy=0;
-    nw_grid_metrics_for_mode(bounds.size.width,bounds.size.height,
-        _columns,_rows,_mode!=1,&cw,&ch,&ox,&oy);
-    if(cw<=0||ch<=0)return;
-    /* The Faithful renderer is a centered 640x480 logical VGA viewport.
-       Its 80x25, 8x16 pixel text grid occupies the middle 640x400 area.
-       The remaining black 40 scanlines at top and bottom plus pillarboxing
-       ensure an invariant 4:3 presentation on every physical screen. */
-    CGContextSetInterpolationQuality(ctx,kCGInterpolationNone);
-    CGContextSetShouldAntialias(ctx,false);
-    const uint8_t *frame=_mode==2?nw4_session_characters(_smp):nw_snake_frame(_core,_overlap);
-    const uint8_t *attributes=_mode==2?nw4_session_attributes(_smp):NULL;
+- (void)drawVisited:(const uint8_t *)visited columns:(int)columns rows:(int)rows
+             cellWidth:(double)cw cellHeight:(double)ch originX:(double)ox originY:(double)oy context:(CGContextRef)ctx {
+    if(!visited)return;
+    // Merge adjacent consumed cells into runs so a mostly eaten desktop stays cheap.
+    CGContextBeginPath(ctx);
+    for(int y=0;y<rows;y++)for(int x=0;x<columns;) {
+        if(!visited[(size_t)y*columns+x]){x++;continue;}
+        int first=x;while(x<columns && visited[(size_t)y*columns+x])x++;
+        CGContextAddRect(ctx,CGRectMake(ox+first*cw,oy+y*ch,(x-first)*cw,ch));
+    }
+    CGContextSetRGBFillColor(ctx,0,0,0,1);CGContextFillPath(ctx);
+}
+- (void)drawCharacters:(const uint8_t *)frame attributes:(const uint8_t *)attributes
+              columns:(int)columns rows:(int)rows cellWidth:(double)cw cellHeight:(double)ch
+               originX:(double)ox originY:(double)oy context:(CGContextRef)ctx {
     if(!frame)return;
-    for(int y=0;y<_rows;y++)for(int x=0;x<_columns;x++) {
-        uint8_t glyph=frame[(size_t)y*(size_t)_columns+(size_t)x];
-        CGImageRef image=NULL;
-        if(glyph==0xdb)image=_shadeImages[0];
-        else if(glyph==0xb2)image=_shadeImages[1];
-        else if(glyph==0xb1)image=_shadeImages[2];
-        else if(glyph==0xb0)image=_shadeImages[3];
-        if(_mode==2 && image) {
-            int stage=glyph==0xdb?0:glyph==0xb2?1:glyph==0xb1?2:3;
-            image=_smpImages[attributes[y*_columns+x]&15][stage];
+    for(int y=0;y<rows;y++)for(int x=0;x<columns;x++) {
+        size_t offset=(size_t)y*columns+x;uint8_t glyph=frame[offset];
+        int stage=glyph==0xdb?0:glyph==0xb2?1:glyph==0xb1?2:glyph==0xb0?3:-1;
+        if(stage<0)continue;
+        CGImageRef image=attributes?_smpImages[attributes[offset]&15][stage]:_shadeImages[stage];
+        if(image)CGContextDrawImage(ctx,CGRectMake(ox+x*cw,oy+y*ch,cw,ch),image);
+    }
+}
+- (void)drawUnifiedInContext:(CGContextRef)ctx {
+    if(!_unified)return;
+    const nw_desktop_layout *layout=_unified.layout;
+    NSRect extent=NSMakeRect(layout->bounds.x,layout->bounds.y,layout->bounds.width,layout->bounds.height);
+    NSScreen *screen=self.window.screen;
+    BOOL displaySized=!self.isPreview && screen && fabs(self.bounds.size.width-screen.frame.size.width)<2 &&
+        fabs(self.bounds.size.height-screen.frame.size.height)<2;
+    CGContextSaveGState(ctx);
+    if(displaySized) {
+        NSRect crop=NWDesktopRectForScreen(screen);CGContextTranslateCTM(ctx,-crop.origin.x,-crop.origin.y);
+    } else {
+        double scale=fmin(self.bounds.size.width/extent.size.width,self.bounds.size.height/extent.size.height);
+        CGContextTranslateCTM(ctx,(self.bounds.size.width-extent.size.width*scale)/2-extent.origin.x*scale,
+            (self.bounds.size.height-extent.size.height*scale)/2-extent.origin.y*scale);
+        CGContextScaleCTM(ctx,scale,scale);
+    }
+    if(_settings.mode==NWModeModern){
+        if(_settings.eatDesktop)for(NSScreen *s in _unified.screens)
+            [_unified.wallpapers[s.deviceDescription[@"NSScreenNumber"]] drawInRect:NWDesktopRectForScreen(s)];
+        for(NSUInteger p=0;p<_unified.modern.count;p++){
+            nw4_session *session=[_unified.modern sessionAtIndex:p];
+            const nw_desktop_layout *grid=[_unified.modern layoutAtIndex:p];
+            if(_settings.eatDesktop)[self drawVisited:nw4_session_visited(session) columns:grid->columns rows:grid->rows cellWidth:grid->cell_width cellHeight:grid->cell_height originX:grid->origin_x originY:grid->origin_y context:ctx];
         }
-        if(image) CGContextDrawImage(ctx,CGRectMake(ox+x*cw,oy+y*ch,cw,ch),image);
+        for(NSUInteger p=0;p<_unified.modern.count;p++){
+            nw4_session *session=[_unified.modern sessionAtIndex:p];
+            const nw_desktop_layout *grid=[_unified.modern layoutAtIndex:p];
+            [self drawCharacters:_settings.resolveGaps?nw4_session_protected_characters(session):nw4_session_characters(session) attributes:_settings.resolveGaps?nw4_session_protected_attributes(session):nw4_session_attributes(session) columns:grid->columns rows:grid->rows cellWidth:grid->cell_width cellHeight:grid->cell_height originX:grid->origin_x originY:grid->origin_y context:ctx];
+        }
+        CGContextRestoreGState(ctx);return;
     }
+    BOOL smp=_settings.mode==NWModeNetWare42;
+    if(_settings.eatDesktop) {
+        for(NSScreen *s in _unified.screens) {
+            NWWallpaperSnapshot *snapshot=_unified.wallpapers[s.deviceDescription[@"NSScreenNumber"]];
+            [snapshot drawInRect:NWDesktopRectForScreen(s)];
+        }
+        [self drawVisited:smp?nw4_session_visited(_unified.smp):nw_snake_visited(_unified.core)
+            columns:layout->columns rows:layout->rows
+            cellWidth:layout->cell_width cellHeight:layout->cell_height originX:layout->origin_x originY:layout->origin_y context:ctx];
+    }
+    const uint8_t *frame=smp?(_settings.resolveGaps?nw4_session_protected_characters(_unified.smp):
+        nw4_session_characters(_unified.smp)):nw_snake_frame(_unified.core,_settings.resolveGaps);
+    const uint8_t *attributes=smp?(_settings.resolveGaps?nw4_session_protected_attributes(_unified.smp):
+        nw4_session_attributes(_unified.smp)):NULL;
+    [self drawCharacters:frame attributes:attributes
+        columns:layout->columns rows:layout->rows cellWidth:layout->cell_width cellHeight:layout->cell_height
+        originX:layout->origin_x originY:layout->origin_y context:ctx];
+    CGContextRestoreGState(ctx);
 }
-#pragma mark - Native ScreenSaver settings sheet
+- (void)drawRect:(NSRect)dirtyRect {
+    (void)dirtyRect;CGContextRef ctx=NSGraphicsContext.currentContext.CGContext;if(!ctx)return;
+    CGContextSetRGBFillColor(ctx,0,0,0,1);CGContextFillRect(ctx,NSRectToCGRect(self.bounds));
+    CGContextSetInterpolationQuality(ctx,kCGInterpolationNone);CGContextSetShouldAntialias(ctx,false);
+    if(_settings.screenMode==NWScreenModeUnifiedDesktop) {
+        [self drawUnifiedInContext:ctx];return;
+    }
+    BOOL smp=_settings.mode==NWModeNetWare42;
+    if((smp && !_smp) || (!smp && !_core))return;
+    // A failed resize retains the previous engine; always render its actual grid.
+    int columns=smp?nw4_session_columns(_smp):nw_snake_columns(_core);
+    int rows=smp?nw4_session_rows(_smp):nw_snake_rows(_core);
+    if(_settings.eatDesktop)[_wallpaper drawInRect:self.bounds];
+    double cw=0,ch=0,ox=0,oy=0;
+    nw_grid_metrics_for_mode(self.bounds.size.width,self.bounds.size.height,columns,rows,
+        _settings.screenMode==NWScreenModeFourThirds,&cw,&ch,&ox,&oy);
+    if(cw<=0 || ch<=0)return;
+    if(_settings.eatDesktop)
+        [self drawVisited:smp?nw4_session_visited(_smp):nw_snake_visited(_core)
+            columns:columns rows:rows cellWidth:cw cellHeight:ch originX:ox originY:oy context:ctx];
+    const uint8_t *frame=smp?(_settings.resolveGaps?nw4_session_protected_characters(_smp):
+        nw4_session_characters(_smp)):nw_snake_frame(_core,_settings.resolveGaps);
+    const uint8_t *attributes=smp?(_settings.resolveGaps?nw4_session_protected_attributes(_smp):
+        nw4_session_attributes(_smp)):NULL;
+    [self drawCharacters:frame attributes:attributes columns:columns rows:rows
+        cellWidth:cw cellHeight:ch originX:ox originY:oy context:ctx];
+}
 - (BOOL)hasConfigureSheet {return YES;}
-- (NSTextField *)addLabel:(NSString *)text y:(CGFloat)y content:(NSView *)content {
-    NSTextField *label=[NSTextField labelWithString:text];
-    label.frame=NSMakeRect(20,y,168,24);
-    [content addSubview:label];return label;
-}
 - (NSWindow *)configureSheet {
-    if(_panel)return _panel;
-    _panel=[[NSPanel alloc] initWithContentRect:NSMakeRect(0,0,535,560)
-             styleMask:NSWindowStyleMaskTitled backing:NSBackingStoreBuffered defer:NO];
-    [_panel setTitle:@"NetWare Snake Settings"];
-    NSView *v=_panel.contentView;
-    [self addLabel:@"Mode" y:504 content:v];
-    _modePopup=[[NSPopUpButton alloc] initWithFrame:NSMakeRect(185,501,330,27) pullsDown:NO];
-    [_modePopup addItemsWithTitles:@[@"NetWare 3.12 Faithful",@"NetWare 3.12 Customizable",@"NetWare 4.2 Faithful"]];
-    [_modePopup selectItemAtIndex:_mode];
-    [_modePopup setTarget:self];[_modePopup setAction:@selector(settingModeChanged:)];[v addSubview:_modePopup];
-    _wideBox=[[NSButton alloc] initWithFrame:NSMakeRect(185,462,330,24)];
-    [_wideBox setButtonType:NSButtonTypeSwitch];[_wideBox setTitle:@"Extend the grid across widescreen displays"];
-    [_wideBox setState:[_defaults boolForKey:@"wide"]?NSControlStateValueOn:NSControlStateValueOff];[v addSubview:_wideBox];
-    [self addLabel:@"Snake color" y:425 content:v];
-    _colorWell=[[NSColorWell alloc] initWithFrame:NSMakeRect(185,419,83,32)];
-    uint8_t rgb[3];NWParseRGB([_defaults stringForKey:@"color"],rgb);
-    _colorWell.color=[NSColor colorWithDeviceRed:rgb[0]/255.0 green:rgb[1]/255.0 blue:rgb[2]/255.0 alpha:1];
-    [v addSubview:_colorWell];
-    [self addLabel:@"Character size" y:383 content:v];
-    _sizePopup=[[NSPopUpButton alloc] initWithFrame:NSMakeRect(185,379,330,27) pullsDown:NO];
-    [_sizePopup addItemsWithTitles:@[@"Small (more cells)",@"Standard",@"Large"]];
-    [_sizePopup selectItemAtIndex:MIN(2,MAX(0,(int)[_defaults integerForKey:@"size"]))];[v addSubview:_sizePopup];
-    [self addLabel:@"Animation speed" y:342 content:v];
-    _speedPopup=[[NSPopUpButton alloc] initWithFrame:NSMakeRect(185,337,330,27) pullsDown:NO];
-    [_speedPopup addItemsWithTitles:@[@"0.5×",@"0.75×",@"1× (18.2 Hz)",@"1.25×",@"1.5×",@"2×"]];
-    const double speeds[]={0.5,0.75,1.0,1.25,1.5,2.0};
-    int closest=2;double d=999;
-    for(int i=0;i<6;i++)if(fabs(speeds[i]-[_defaults doubleForKey:@"speed"])<d){closest=i;d=fabs(speeds[i]-[_defaults doubleForKey:@"speed"]);}
-    [_speedPopup selectItemAtIndex:closest];[v addSubview:_speedPopup];
-    _overlapBox=[[NSButton alloc] initWithFrame:NSMakeRect(185,298,330,24)];
-    [_overlapBox setButtonType:NSButtonTypeSwitch];[_overlapBox setTitle:@"Prevent original self-crossing gaps"];
-    [_overlapBox setState:[_defaults boolForKey:@"overlap"]?NSControlStateValueOn:NSControlStateValueOff];[v addSubview:_overlapBox];
-    [self addLabel:@"CPU load source" y:265 content:v];
-    _sourcePopup=[[NSPopUpButton alloc] initWithFrame:NSMakeRect(185,261,330,27) pullsDown:NO];
-    [_sourcePopup addItemsWithTitles:@[@"Live macOS aggregate CPU (default)",@"Demo: sweep through five bands"]];
-    [_sourcePopup selectItemAtIndex:[_defaults boolForKey:@"demo"]?1:0];[v addSubview:_sourcePopup];
-    _diagnosticsBox=[[NSButton alloc] initWithFrame:NSMakeRect(20,216,495,24)];
-    [_diagnosticsBox setButtonType:NSButtonTypeSwitch];
-    [_diagnosticsBox setTitle:@"Enable diagnostic logging (troubleshooting only)"];
-    [_diagnosticsBox setState:[_defaults boolForKey:@"diagnostics"]?NSControlStateValueOn:NSControlStateValueOff];
-    [v addSubview:_diagnosticsBox];
-    _allow32Box=[[NSButton alloc] initWithFrame:NSMakeRect(20,174,495,24)];
-    [_allow32Box setButtonType:NSButtonTypeSwitch];
-    _allow32Box.title=@"4.2: Allow up to 32 CPUs (default limit: 31)";
-    _allow32Box.state=[_defaults boolForKey:@"allow32"]?NSControlStateValueOn:NSControlStateValueOff;
-    _allow32Box.target=self;_allow32Box.action=@selector(settingModeChanged:);[v addSubview:_allow32Box];
-    _cpuCountLabel=[NSTextField wrappingLabelWithString:@""];
-    _cpuCountLabel.frame=NSMakeRect(20,129,495,36);
-    _cpuCountLabel.font=[NSFont systemFontOfSize:11];
-    _cpuCountLabel.textColor=[NSColor secondaryLabelColor];[v addSubview:_cpuCountLabel];
-    NSTextField *hint=[NSTextField labelWithString:@"Faithful: fixed 80×25 grid, centered 4:3 VGA presentation."];
-    hint.frame=NSMakeRect(20,89,495,22);
-    hint.font=[NSFont systemFontOfSize:11];hint.textColor=[NSColor secondaryLabelColor];
-    [v addSubview:hint];
-    _resetButton=[[NSButton alloc] initWithFrame:NSMakeRect(20,38,148,30)];
-    _resetButton.title=@"Restore Defaults…";_resetButton.bezelStyle=NSBezelStyleRounded;
-    _resetButton.target=self;_resetButton.action=@selector(restoreCustomDefaults:);[v addSubview:_resetButton];
-    NSButton *cancel=[[NSButton alloc] initWithFrame:NSMakeRect(327,38,90,30)];
-    cancel.title=@"Cancel";cancel.bezelStyle=NSBezelStyleRounded;
-    cancel.target=self;cancel.action=@selector(cancelSettings:);[v addSubview:cancel];
-    NSButton *save=[[NSButton alloc] initWithFrame:NSMakeRect(425,38,90,30)];
-    save.title=@"Save";save.bezelStyle=NSBezelStyleRounded;
-    save.keyEquivalent=@"\r";save.target=self;save.action=@selector(saveSettings:);[v addSubview:save];
-    /* Bundle-local metadata: ScreenSaverEngine's mainBundle is NOT our saver.
-       Always resolve version/build from the class's owning bundle. */
-    NSBundle *bundle=[NSBundle bundleForClass:[NetWareSnakeView class]];
-    NSString *version=[bundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"]?:@"unknown";
-    NSString *build=[bundle objectForInfoDictionaryKey:@"CFBundleVersion"]?:@"?";
-    NSTextField *footer=[NSTextField labelWithString:
-        [NSString stringWithFormat:@"NetWare Snake v%@ · build %@",version,build]];
-    footer.frame=NSMakeRect(20,7,495,18);
-    footer.alignment=NSTextAlignmentCenter;
-    footer.font=[NSFont systemFontOfSize:11];
-    footer.textColor=[NSColor tertiaryLabelColor];
-    [v addSubview:footer];
-    [self settingModeChanged:nil];return _panel;
-}
-- (void)settingModeChanged:(id)sender {
-    BOOL editable=(_modePopup.indexOfSelectedItem==1);
-    /* A checked-but-disabled Widescreen box misleadingly suggests the
-       historical picture is stretched. Show it OFF while in Faithful mode;
-       restore the saved Customizable value when switching back. */
-    if (!editable) [_wideBox setState:NSControlStateValueOff];
-    else if (sender==_modePopup) {
-        [_wideBox setState:[_defaults boolForKey:@"wide"]?
-            NSControlStateValueOn:NSControlStateValueOff];
-    }
-    [_wideBox setEnabled:editable];[_colorWell setEnabled:editable];
-    [_sizePopup setEnabled:editable];[_speedPopup setEnabled:editable];
-    [_overlapBox setEnabled:editable];[_sourcePopup setEnabled:editable];
-    [_resetButton setEnabled:editable];
-    BOOL smp=(_modePopup.indexOfSelectedItem==2);
-    _allow32Box.enabled=smp;
-    [_sourcePopup itemAtIndex:0].title=smp?@"Live macOS per-CPU load":@"Live macOS aggregate CPU (default)";
-    if(smp)[_sourcePopup selectItemAtIndex:0];
-    else if(sender==_modePopup)[_sourcePopup selectItemAtIndex:[_defaults boolForKey:@"demo"]?1:0];
-    NSUInteger host=[[NWCPUReader sharedReader] hostProcessorCount];
-    unsigned count=nw4_processor_count((unsigned)host,_allow32Box.state==NSControlStateValueOn);
-    _cpuCountLabel.stringValue=smp?[NSString stringWithFormat:
-        @"4.2 uses %u of %lu host logical CPUs, with one snake per CPU and live per-CPU load.",
-        count,(unsigned long)host]:@"4.2 processor settings apply only to NetWare 4.2 Faithful mode.";
-}
-- (void)restoreCustomDefaults:(id)sender {
-    (void)sender;
-    if (_modePopup.indexOfSelectedItem!=1)return;
-    NSAlert *alert=[[NSAlert alloc] init];
-    alert.messageText=@"Restore Customizable defaults?";
-    alert.informativeText=@"Widescreen on, original red, standard size, 1× speed, historical crossing gaps, and live CPU. Faithful mode is unchanged.";
-    [alert addButtonWithTitle:@"Restore Defaults"];
-    [alert addButtonWithTitle:@"Cancel"];
-    NSModalResponse answer=[alert runModal];
-    if(answer!=NSAlertFirstButtonReturn)return;
-    [_wideBox setState:NSControlStateValueOn];
-    _colorWell.color=[NSColor colorWithDeviceRed:170.0/255.0 green:0 blue:0 alpha:1];
-    [_sizePopup selectItemAtIndex:1];[_speedPopup selectItemAtIndex:2];
-    [_overlapBox setState:NSControlStateValueOff];
-    [_sourcePopup selectItemAtIndex:0];
-    [self saveSettings:nil];
-}
-- (void)dismissSettings:(NSModalResponse)result {
-    [NSApp endSheet:_panel returnCode:result];
-    [_panel orderOut:nil];
-    _panel=nil;
-}
-- (void)cancelSettings:(id)sender {(void)sender;[self dismissSettings:NSModalResponseCancel];}
-- (void)saveSettings:(id)sender {
-    (void)sender;
-    const double speeds[]={0.5,0.75,1.0,1.25,1.5,2.0};
-    const BOOL customizable=(_modePopup.indexOfSelectedItem==1);
-    [_defaults setInteger:_modePopup.indexOfSelectedItem forKey:@"mode"];
-    if(_modePopup.indexOfSelectedItem==2)
-        [_defaults setBool:_allow32Box.state==NSControlStateValueOn forKey:@"allow32"];
-    /* Do not overwrite remembered Customizable preferences with disabled
-       controls when the user saves Faithful mode. */
-    if (customizable) {
-        [_defaults setBool:_wideBox.state==NSControlStateValueOn forKey:@"wide"];
-        [_defaults setObject:NWColorHex(_colorWell.color) forKey:@"color"];
-        [_defaults setInteger:_sizePopup.indexOfSelectedItem forKey:@"size"];
-        [_defaults setDouble:speeds[MIN(5,MAX(0,(int)_speedPopup.indexOfSelectedItem))] forKey:@"speed"];
-        [_defaults setBool:_overlapBox.state==NSControlStateValueOn forKey:@"overlap"];
-        [_defaults setBool:_sourcePopup.indexOfSelectedItem==1 forKey:@"demo"];
-    }
-    [_defaults setBool:_diagnosticsBox.state==NSControlStateValueOn forKey:@"diagnostics"];
-    [_defaults synchronize];
-    [[NSNotificationCenter defaultCenter] postNotificationName:NWChangedNotification object:nil];
-    [self dismissSettings:NSModalResponseOK];
+    if(!_configuration || !_configuration.panel.sheetParent)
+        _configuration=[[NWConfigurationController alloc] initWithDefaults:_defaults];
+    return _configuration.panel;
 }
 @end

@@ -4,7 +4,7 @@ cd "$(dirname "$0")"
 SOURCE="$PWD/build/NetWareSnake.saver"
 TARGET_DIR="$HOME/Library/Screen Savers"
 TARGET="$TARGET_DIR/NetWareSnake.saver"
-STAGING="$TARGET_DIR/.NetWareSnake-v040-install-$$.saver"
+STAGING="$TARGET_DIR/.NetWareSnake-v070-install-$$.saver"
 BACKUP="$TARGET_DIR/NetWareSnake.previous.saver"
 if [[ ! -s "$SOURCE/Contents/MacOS/NetWareSnake" || ! -f "$SOURCE/Contents/Info.plist" ]]; then
   echo 'ERROR: Built screensaver missing. Run ./build-macos.sh successfully first. No changes made.' >&2
@@ -12,8 +12,8 @@ if [[ ! -s "$SOURCE/Contents/MacOS/NetWareSnake" || ! -f "$SOURCE/Contents/Info.
 fi
 VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$SOURCE/Contents/Info.plist")
 BUILD=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$SOURCE/Contents/Info.plist")
-if [[ "$VERSION" != '0.4.0' || "$BUILD" != '13' ]]; then
-  echo "ERROR: Expected v0.4.0 (13), got $VERSION ($BUILD). No changes made." >&2
+if [[ "$VERSION" != '0.7.0' || "$BUILD" != '16' ]]; then
+  echo "ERROR: Expected v0.7.0 (16), got $VERSION ($BUILD). No changes made." >&2
   exit 1
 fi
 if pgrep -x 'System Settings' >/dev/null; then
