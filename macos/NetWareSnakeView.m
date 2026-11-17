@@ -15,7 +15,7 @@
 #import "nw4_session.h"
 
 static NSString * const NWModuleID=@"org.netwaresnake.mac.saver";
-static NSString * const NWBuildTag=@"0.7.0";
+static NSString * const NWBuildTag=@"0.7.3";
 static const int NWBandDemo[9]={5,17,28,44,75,44,28,17,5};
 static os_log_t NWLogHandle(void) {
     static os_log_t log;
@@ -69,6 +69,8 @@ static unsigned NWProcessorCountForSettings(NWSettings *settings) {
     uint64_t _lastUnifiedRevision;
     NSUserDefaults *_defaults;
     NWConfigurationController *_configuration;
+    __weak NSWindow *_observedWindow;
+    NSString *_lastDisplayMapping;
 }
 - (instancetype)initWithFrame:(NSRect)frame isPreview:(BOOL)preview {
     return [self initWithFrame:frame isPreview:preview defaults:nil];
@@ -76,6 +78,7 @@ static unsigned NWProcessorCountForSettings(NWSettings *settings) {
 - (instancetype)initWithFrame:(NSRect)frame isPreview:(BOOL)preview defaults:(NSUserDefaults *)defaults {
     self=[super initWithFrame:frame isPreview:preview];
     if(self) {
+        _unifiedOverview=preview;
         self.animationTimeInterval=1.0/30.0;
         _initialSeed=arc4random()^(uint32_t)(uintptr_t)self;
         _defaults=defaults?:[ScreenSaverDefaults defaultsForModuleWithName:NWModuleID];
@@ -104,7 +107,19 @@ static unsigned NWProcessorCountForSettings(NWSettings *settings) {
 }
 - (void)viewDidMoveToWindow {
     [super viewDidMoveToWindow];
+    if(_observedWindow) {
+        [[NSNotificationCenter defaultCenter] removeObserver:self name:NSWindowDidChangeScreenNotification object:_observedWindow];
+        [[NSNotificationCenter defaultCenter] removeObserver:self name:NSWindowDidChangeBackingPropertiesNotification object:_observedWindow];
+    }
+    _observedWindow=self.window;_lastDisplayMapping=nil;
+    if(_observedWindow) {
+        [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(hostScreenChanged:) name:NSWindowDidChangeScreenNotification object:_observedWindow];
+        [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(hostScreenChanged:) name:NSWindowDidChangeBackingPropertiesNotification object:_observedWindow];
+    }
     if(_defaults && self.window)[self applyPreferences];
+}
+- (void)hostScreenChanged:(NSNotification *)note {
+    (void)note;[self applyPreferences];[self setNeedsDisplay:YES];
 }
 - (void)settingsChanged:(NSNotification *)note {
     (void)note;[_defaults synchronize];[self applyPreferences];
@@ -331,12 +346,34 @@ static unsigned NWProcessorCountForSettings(NWSettings *settings) {
     if(!_unified)return;
     const nw_desktop_layout *layout=_unified.layout;
     NSRect extent=NSMakeRect(layout->bounds.x,layout->bounds.y,layout->bounds.width,layout->bounds.height);
-    NSScreen *screen=self.window.screen;
-    BOOL displaySized=!self.isPreview && screen && fabs(self.bounds.size.width-screen.frame.size.width)<2 &&
-        fabs(self.bounds.size.height-screen.frame.size.height)<2;
+    NSRect globalView=[self.window convertRectToScreen:[self convertRect:self.bounds toView:nil]];
+    BOOL remoteHost=[NSStringFromClass(self.window.class) containsString:@"NSServiceView"];
+    NSScreen *screen=remoteHost?NWScreenForRemoteDesktopView(globalView,self.window.screen,_unified.screens):
+        NWScreenForDesktopView(globalView,self.window.screen,_unified.screens);
+    NSString *mapping=[NSString stringWithFormat:@"pid=%d view=%p window=%@ preview=%d overview=%d hostDisplay=%@ chosenDisplay=%@ bounds=%@ windowFrame=%@ globalView=%@ chosenFrame=%@",
+        NSProcessInfo.processInfo.processIdentifier,self,NSStringFromClass(self.window.class),self.isPreview,self.unifiedOverview,
+        self.window.screen.deviceDescription[@"NSScreenNumber"],screen.deviceDescription[@"NSScreenNumber"],
+        NSStringFromRect(self.bounds),NSStringFromRect(self.window.frame),NSStringFromRect(globalView),NSStringFromRect(screen.frame)];
+    NSMutableString *available=[NSMutableString new];
+    for(NSScreen *candidate in _unified.screens)
+        [available appendFormat:@" %@:%@",candidate.deviceDescription[@"NSScreenNumber"],NSStringFromRect(candidate.frame)];
+    mapping=[mapping stringByAppendingFormat:@" remoteHost=%d availableDisplays=%@",remoteHost,available];
+    if(![_lastDisplayMapping isEqual:mapping]) {
+        _lastDisplayMapping=mapping;
+        // One event per changed display mapping; no per-frame animation or CPU data.
+        os_log(NWLogHandle(),"DISPLAY_MAPPING build=%{public}@ %{public}@",NWBuildTag,mapping);
+    }
     CGContextSaveGState(ctx);
-    if(displaySized) {
-        NSRect crop=NWDesktopRectForScreen(screen);CGContextTranslateCTM(ctx,-crop.origin.x,-crop.origin.y);
+    if(!self.unifiedOverview && screen) {
+        // Full-screen rendering must never fall back to a complete-desktop
+        // overview because host view sizes or backing scales differ.
+        NSRect crop=NWDesktopRectForScreen(screen);
+        double scale=fmin(self.bounds.size.width/crop.size.width,self.bounds.size.height/crop.size.height);
+        CGContextTranslateCTM(ctx, self.bounds.origin.x+(self.bounds.size.width-crop.size.width*scale)/2,
+            self.bounds.origin.y+(self.bounds.size.height-crop.size.height*scale)/2);
+        CGContextScaleCTM(ctx,scale,scale);
+        CGContextTranslateCTM(ctx,-crop.origin.x,-crop.origin.y);
+        CGContextClipToRect(ctx,NSRectToCGRect(crop));
     } else {
         double scale=fmin(self.bounds.size.width/extent.size.width,self.bounds.size.height/extent.size.height);
         CGContextTranslateCTM(ctx,(self.bounds.size.width-extent.size.width*scale)/2-extent.origin.x*scale,

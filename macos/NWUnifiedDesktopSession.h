@@ -22,3 +22,7 @@
 - (void)advanceAtTime:(CFTimeInterval)time;
 @end
 FOUNDATION_EXPORT NSRect NWDesktopRectForScreen(NSScreen *screen);
+/* Prefer the host's display identity. Remote-window frames may still describe
+   the main display; position is only a fallback when no valid screen exists. */
+FOUNDATION_EXPORT NSScreen *NWScreenForDesktopView(NSRect globalView, NSScreen *hint, NSArray<NSScreen *> *screens);
+FOUNDATION_EXPORT NSScreen *NWScreenForRemoteDesktopView(NSRect globalView, NSScreen *hint, NSArray<NSScreen *> *screens);

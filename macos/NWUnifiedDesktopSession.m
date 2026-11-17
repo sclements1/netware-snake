@@ -19,6 +19,44 @@ NSRect NWDesktopRectForScreen(NSScreen *screen) {
     NSRect r=screen.frame;
     return NSMakeRect(r.origin.x,-NSMaxY(r),r.size.width,r.size.height);
 }
+NSScreen *NWScreenForDesktopView(NSRect globalView,NSScreen *hint,NSArray<NSScreen *> *screens) {
+    // Remote screen saver windows can retain the main display's frame while
+    // their screen property already identifies the correct physical display.
+    // Never override that display identity with inferred window coordinates.
+    NSNumber *displayID=hint.deviceDescription[@"NSScreenNumber"];
+    if(displayID)for(NSScreen *screen in screens)
+        if([screen.deviceDescription[@"NSScreenNumber"] isEqual:displayID])return screen;
+    NSScreen *best=[screens containsObject:hint]?hint:screens.firstObject;
+    NSRect intersection=best?NSIntersectionRect(globalView,best.frame):NSZeroRect;
+    double area=intersection.size.width*intersection.size.height;
+    for(NSScreen *screen in screens) {
+        NSRect r=NSIntersectionRect(globalView,screen.frame);
+        double candidate=r.size.width*r.size.height;
+        if(candidate>area){area=candidate;best=screen;}
+    }
+    return best;
+}
+static NSScreen *NWExactDisplay(NSRect rect,NSArray<NSScreen *> *screens) {
+    for(NSScreen *screen in screens) {
+        NSRect f=screen.frame;
+        if(fabs(rect.origin.x-f.origin.x)<2 && fabs(rect.origin.y-f.origin.y)<2 &&
+           fabs(rect.size.width-f.size.width)<2 && fabs(rect.size.height-f.size.height)<2)return screen;
+    }
+    return nil;
+}
+NSScreen *NWScreenForRemoteDesktopView(NSRect globalView,NSScreen *hint,NSArray<NSScreen *> *screens) {
+    // NSServiceViewControllerWindow may expose a top-left-origin remote frame
+    // even though NSScreen frames use Cocoa's bottom-left desktop coordinates.
+    // Only a unique exact geometry match may override the host's identity.
+    NSScreen *primary=screens.firstObject;
+    NSRect flipped=NSMakeRect(globalView.origin.x,NSMaxY(primary.frame)-NSMaxY(globalView),
+        globalView.size.width,globalView.size.height);
+    NSScreen *native=NWExactDisplay(globalView,screens),*remote=NWExactDisplay(flipped,screens);
+    if(native && !remote)return native;
+    if(remote && !native)return remote;
+    if(native==remote && native)return native;
+    return NWScreenForDesktopView(globalView,hint,screens);
+}
 @implementation NWUnifiedDesktopSession {
     nw_snake *_core;
     NWModernSession *_modern;

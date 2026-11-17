@@ -1,0 +1,51 @@
+NETWARE SNAKE — START HERE
+macOS 13 or later • Apple Silicon
+
+TRY IT FIRST
+Open NetWareSnakePreview.app. Press Command-comma to open Settings.
+Command-Shift-F previews all displays; Escape returns to the window.
+The preview can be used without installing the screen saver.
+
+INSTALL
+1. Quit System Settings if it is open.
+2. Double-click NetWareSnake.saver.
+3. If macOS offers a choice, choose installation for your user account only.
+4. Open System Settings and find Screen Saver (the location varies by macOS
+   version). Select NetWare Snake and open its options to choose a mode.
+5. Check the options footer matches the version in RELEASE-STATUS.txt.
+6. Eject this disk image when finished.
+
+You can copy NetWareSnakePreview.app to Applications to keep the preview.
+Installing the saver does not require installing the preview app.
+
+UPDATING
+Quit System Settings before installing a newer version. If macOS asks whether
+to replace the installed saver, choose Replace. Reopen Settings and check the
+version footer. Settings are stored separately from the installed bundle.
+If the saver still behaves like the previous build, restart your Mac to ensure
+the cached screen saver host reloads the updated bundle.
+The standard macOS installation flow does not create a backup; retain your
+previous download if you want to roll back.
+
+REMOVING
+Select a different screen saver, then quit System Settings. In Finder choose
+Go > Go to Folder and enter ~/Library/Screen Savers/ . Move NetWareSnake.saver
+to Trash. If you installed it for all users, check /Library/Screen Savers/ too.
+Remove the preview app separately if you copied it to Applications.
+Preferences are retained, so a reinstall can reuse your settings.
+
+ABOUT THE MODES
+NetWare 3.12: one snake, Faithful red by default.
+NetWare 4.2: historical palette and detected or simulated CPU choices.
+Modern: Unified Desktop, up to 128 logical CPUs, adaptive E/P/S core sizing.
+Unknown core types use Medium size. Modern adapts historical crossing behavior.
+
+Unified animation is shared within one host process. macOS configurations that
+use separate screen saver host processes may show independent animations.
+Eat the Desktop uses static wallpaper image files, not application windows.
+Some dynamic or unavailable wallpapers fall back to a fill color.
+
+HELP
+https://github.com/sclements1/netware-snake
+Include the macOS version, saver version/build, and display arrangement when
+reporting an issue. Do not include passwords or signing credentials.

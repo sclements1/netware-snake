@@ -14,3 +14,9 @@ build/
 
 # Python temporary files
 __pycache__/
+
+# Local signing materials (never commit)
+*.p12
+*.p8
+*.keychain-db
+*.dmg

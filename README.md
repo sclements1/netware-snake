@@ -1,10 +1,12 @@
-# NetWare Snake for macOS v0.7.0
+# NetWare Snake for macOS v0.7.3
 
-A native macOS screensaver and standalone preview with researched NetWare 3.12 and NetWare 4.2 simulations. This release is **build 16**.
+A native macOS screensaver and standalone preview with researched NetWare 3.12 and NetWare 4.2 simulations. This release is **build 19**.
 
 ## Modes and settings
 
-The Mode menu contains exactly **NetWare 3.12**, **NetWare 4.2**, and **Modern**. Modern is enabled. It defaults to a Unified desktop, measured per-CPU loads, 1× speed, the CPU 0 palette start, original gaps and wallpaper off. This first Modern implementation uses a unified canvas; the screen selector is locked to Unified. CPUs is a read-only host logical processor count, with up to 128 snakes. Size is read-only Adaptive: E = Small, P = Medium, S = Large. Unrecognized or unavailable core metadata uses Medium. Core types are read from IODeviceTree cluster-type and logical-cpu-id rather than guessed from processor ordering. Intel and restricted hosts may lack this metadata. Each Modern snake runs a 4.2-derived simulation on its own size grid; the historical shared RNG and destructive inter-snake erasures are not reproduced between these differently sized layers. The first snake starts immediately, with subsequent snakes staggered four simulation intervals apart.
+The Mode menu contains **NetWare 3.12**, **NetWare 4.2**, and **Modern**. Each mode retains its own settings.
+
+**NetWare 3.12**, **NetWare 4.2**, and **Modern**. Modern is enabled. It defaults to a Unified desktop, measured per-CPU loads, 1× speed, the CPU 0 palette start, original gaps and wallpaper off. This first Modern implementation uses a unified canvas; the screen selector is locked to Unified. CPUs is a read-only host logical processor count, with up to 128 snakes. Size is read-only Adaptive: E = Small, P = Medium, S = Large. Unrecognized or unavailable core metadata uses Medium. Core types are read from IODeviceTree cluster-type and logical-cpu-id rather than guessed from processor ordering. Intel and restricted hosts may lack this metadata. Each Modern snake runs a 4.2-derived simulation on its own size grid; the historical shared RNG and destructive inter-snake erasures are not reproduced between these differently sized layers. The first snake starts immediately, with subsequent snakes staggered four simulation intervals apart.
 
 **NetWare 3.12** uses the original single red snake. Its options are:
 
@@ -23,7 +25,9 @@ Defaults are 4:3 mode, Medium, 1×, Measured CPU, original crossing gaps, and Ea
 
 The **CPUs** menu offers detected CPUs capped at 31 (historically accurate), detected CPUs capped at 32, or **Fixed 32**. Fixed 32 always creates 32 snakes and forces **Simulated load**; leaving it restores the prior Measured/Stepped demo selection. Simulated loads vary by CPU through phased load bands.
 
-The 4.2 snakes start from column 38, row 12 (zero based), two characters wide, staggered by four simulation intervals per CPU. The nominal rate is 18.2 passes/second, supported by the supplied startup recording. CPU 31 first draws about 6.8 seconds after CPU 0. Their trails change length and motion with each CPU's utilization; they are not recolored copies of the 3.12 snake. 4:3 and Widescreen keep independent consoles; Unified desktop shares all snakes across the display layout.
+With the default Medium 4:3 grid, the 4.2 snakes start from column 38, row 12 (zero based), two characters wide, staggered by four simulation intervals per CPU. The nominal rate is 18.2 passes/second, supported by the supplied startup recording. CPU 31 first draws about 6.8 seconds after CPU 0. Their trails change length and motion with each CPU's utilization; they are not recolored copies of the 3.12 snake. 4:3 and Widescreen keep independent consoles; Unified desktop shares all snakes across the display layout.
+
+**Modern** defaults to Unified Desktop, measured per-CPU loads, 1× speed, the CPU 0 palette start, original gaps and wallpaper off. Its canvas is currently locked to Unified Desktop. CPUs shows the host logical processor count, capped at 128 snakes. Size is Adaptive: E = Small, P = Medium, S = Large; unknown core types use Medium. Core types come from IODeviceTree `cluster-type` and `logical-cpu-id`, not assumed CPU ordering. Each snake runs a 4.2-derived simulation on its own size grid; historical shared RNG and destructive inter-snake erasures are not reproduced across those layers. Starts are staggered four simulation intervals per CPU.
 
 Settings edits stay in a draft while switching modes. **Restore Defaults** resets the visible mode's draft without confirmation or saving. **Save** applies it; **Cancel** discards it. Existing v0.4 Faithful preferences map to 3.12 defaults, Customizable preferences map to the corresponding 3.12 controls with the closest available speed, and SMP preferences map to 4.2 with the CPU-cap choice preserved. Each mode now retains its own profile, including color and load-source choices. Migration does not write preferences until Save.
 
@@ -31,7 +35,7 @@ Settings edits stay in a draft while switching modes. **Restore Defaults** reset
 
 In **Unified desktop mode**, participating display views share one selected-mode world and clock within their host process. The grid follows the macOS display arrangement: adjoining screens share a seam, while areas outside the actual displays are boundaries. A windowed preview fits the full layout into its window; the all-display preview shows each display's portion.
 
-Sharing is **process-local**. Separate screen-saver host processes do not synchronize with one another. Physical multi-monitor behavior in the macOS system screen saver still needs validation; the all-display preview is provided to inspect the shared layout directly. The ordinary 4:3 and Widescreen modes keep independent per-display worlds.
+Sharing is **process-local**. Separate screen-saver host processes do not synchronize with one another. User testing passed two and three side-by-side displays and a three-display T layout with build 19. Other layouts and host configurations are not yet verified. The ordinary 4:3 and Widescreen modes keep independent per-display worlds.
 
 Eat the desktop reads the configured wallpaper file and public scaling/fill options through **NSWorkspace** when an activation begins. It does **not** capture application windows, icons, or the on-screen desktop, and does not use screen recording. The picture stays static while visited trail cells turn black; restarting starts with a fresh picture and trail mask.
 
@@ -64,7 +68,7 @@ Select a mode, adjust its visible controls, and Save. After checking the preview
 ./install-macos.sh
 ```
 
-The installer checks **v0.7.0/build 16** before replacing the saver and backs up the prior one as `~/Library/Screen Savers/NetWareSnake.previous.saver`. Building alone does not install anything. The Settings footer obtains its version/build from the actual loaded bundle. Normal operation logs no animation frames or CPU samples.
+The installer checks **v0.7.3/build 19** before replacing the saver and backs up the prior one as `~/Library/Screen Savers/NetWareSnake.previous.saver`. Building alone does not install anything. The Settings footer obtains its version/build from the actual loaded bundle. Normal operation logs no animation frames or CPU samples.
 
 ## Validation
 
@@ -73,6 +77,16 @@ The installer checks **v0.7.0/build 16** before replacing the saver and backs up
 ./tools/run-macos-tests.sh      # native fixtures, sanitizers, bundles and signatures
 ```
 
-The project includes native settings migration/persistence tests, actual AppKit control and draft-behavior checks, wallpaper fixtures, visited-trail tests, and synthetic multi-display geometry tests. These complement the historical engine comparisons; they do not replace physical multi-monitor system-saver validation.
+The automated suite covers 32 portable tests, native settings and rendering fixtures, per-CPU sampling, wallpaper consumption, synthetic 128-CPU Modern operation, sanitizer stress and signature verification. User-reported installation and multi-display results, plus pending distribution checks, are maintained in [the release validation record](docs/MACOS-RELEASE-TESTING.md).
 
-For a visual check, open Settings and confirm **v0.7.0 · build 16**. Check the shared controls and color choices, switch to 4.2 and back before saving, and verify Restore Defaults followed by Cancel leaves saved settings unchanged. In Unified desktop mode, use Command-Shift-F to inspect display seams and Escape to return. With Eat the desktop enabled, verify the wallpaper remains static and the visited trail becomes black. Finally check 4.2's center startup, colors, per-CPU response, and 31/32 cap on a host with enough logical CPUs. If the system saver retains an old build, quit and reopen System Settings after installation.
+For a visual check, open Settings and confirm **v0.7.3 · build 19**. Check the shared controls and color choices, switch to 4.2 and back before saving, and verify Restore Defaults followed by Cancel leaves saved settings unchanged. In Unified desktop mode, use Command-Shift-F to inspect display seams and Escape to return. With Eat the desktop enabled, verify the wallpaper remains static and the visited trail becomes black. Finally check 4.2's center startup, colors, per-CPU response, and 31/32 cap on a host with enough logical CPUs. If the system saver retains an old build, quit System Settings and restart the Mac before retesting. The host can cache an older loaded bundle even after replacement.
+
+## Distribution preparation
+
+Run `./tools/release-macos.sh development` for an offline, clearly labeled development DMG. The [release procedure](docs/MACOS-RELEASE.md) covers Developer ID signing, staged Apple notarization, ticket stapling and clean-Mac acceptance tests. Signing and notarization remain pending; the current artifacts are development builds.
+
+## Unified Desktop diagnostics
+
+The renderer distinguishes an explicit whole-desktop overview from the crop assigned to each physical display. Remote screen saver windows can expose negative-Y top-left coordinates or no screen ID, so exact frame matches are checked in both coordinate systems before identity/position fallbacks. Native regression tests cover these cases across all three modes.
+
+A `DISPLAY_MAPPING` event is logged when an assignment changes; no animation frames or CPU samples are logged. To investigate the installed saver, run `./collect-diagnostics.sh` after activating and exiting it. Check entries from `legacyScreenSaver` and their build tag: entries from `view` / `NWFixtureWindow` belong to automated fixtures, not the installed host.

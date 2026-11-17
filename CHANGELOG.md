@@ -1,11 +1,37 @@
-# v0.7.0 — Modern adaptive mode
+# Changelog
+
+## v0.7.3 — Unified Desktop and release preparation (build 19)
+
+### Unified Desktop
+
+- Fixed mirrored or whole-desktop rendering on individual screens in T-shaped display arrangements. Remote-host rectangles are matched in Cocoa and top-left desktop coordinates; recognized host display IDs and position provide fallbacks.
+- Separate explicit overview rendering for thumbnails/windowed previews from per-display crops. Preserve character proportions when host view sizes differ from display sizes.
+- Handle delayed host screen and backing-scale changes without resetting animation.
+- Add changed-mapping diagnostics and regression tests for all three modes, including negative-Y remote frames, missing screen IDs, scaled views and horizontal layouts.
+
+### Distribution
+
+- Add a local release pipeline for development DMGs, Developer ID signing, two-stage notarization, ticket stapling, verification and checksums.
+- Include installation, upgrade and removal instructions, including recovery from a cached screen saver host after an update.
+- Reject modified artifacts/payloads, duplicate submissions and attempts to promote development artifacts.
+
+### Validation and limits
+
+- Automated checks: 32 portable tests, native settings/rendering/CPU/wallpaper fixtures, synthetic 128-CPU Modern tests, sanitizer stress and bundle signatures pass.
+- User-reported checks: new installation, upgrade, removal, two- and three-display horizontal layouts, and the three-display T arrangement. The T-layout pass was confirmed with build 19 after restarting the cached host.
+- Bundles are development/ad-hoc signed. Developer ID signing, Apple notarization and clean-account offline distribution checks remain pending.
+- Unified animation remains process-local. The tested host served all three displays in one process; separate-process synchronization is not implemented.
+
+Development builds 17–18 were intermediate T-layout fixes and are superseded by build 19. See [the validation record](docs/MACOS-RELEASE-TESTING.md) for the evidence boundary and [the release procedure](docs/MACOS-RELEASE.md) for distribution steps.
+
+## v0.7.0 — Modern adaptive mode
 
 - Enabled Modern with Unified desktop defaults, detected host CPU count and up to 128 snakes.
 - Added per-logical-CPU E/P/S topology detection and Small/Medium/Large size grids; unknown types use Medium.
 - Retained independent Modern preferences and 4.2-derived movement with per-CPU measured loads.
 - Added synthetic 128-CPU adaptive-grid and scheduling tests.
 
-# v0.6.0 — Colors and expanded 4.2 configuration
+## v0.6.0 — Colors and expanded 4.2 configuration
 
 - Added a 3.12 color picker, defaulting to Faithful red.
 - Exposed all shared controls in 4.2, including Unified desktop, wallpaper consumption, crossing protection, speed and size.
@@ -14,7 +40,7 @@
 - Saved independent mode profiles with read-only migration from previous settings.
 - Preserved default historical engine behavior and added full-width enhanced histories.
 
-# v0.5.0 — Settings, unified desktop, and wallpaper trail
+## v0.5.0 — Settings, unified desktop, and wallpaper trail
 
 - Replaced the old Faithful/Customizable/SMP menu with exactly **NetWare 3.12**, **NetWare 4.2**, and **Modern**. Modern remains disabled with an explanatory hint; no modern engine or behavior has been invented.
 - Consolidated 3.12 settings into Resolve gaps; Screen mode (**4:3**, **Widescreen**, **Unified desktop**); Eat the desktop; Speed (**0.5×**, **1×**, **2×**); Size (**Small**, **Medium**, **Large**); and CPU source (**Measured**, **Stepped demo**). The snake stays red and the color selector is removed.
@@ -27,7 +53,7 @@
 
 Validation boundary: physical multi-monitor operation inside the macOS system screen saver remains pending. Unified sharing is within one host process; the all-display preview provides a direct layout check. Historical font pixels, exact DAC colors, and kernel timing/scheduling jitter remain approximation boundaries. The v0.4 original-instruction evidence below continues to apply to the retained 4.2 engine.
 
-# v0.4.0 — NetWare 4.2 Faithful
+## v0.4.0 — NetWare 4.2 Faithful
 
 - Added the instruction-validated 4.2 engine as a third mode, preserving both 3.12 modes and their stored settings.
 - Maps host logical CPUs to snakes, capped at 31 by default with an explicit option allowing 32.
@@ -39,7 +65,7 @@ Validation boundary: physical multi-monitor operation inside the macOS system sc
 
 Validation: 21 tests, native CPU-reader fixtures, 160,000 sanitized engine passes, 20,000 sanitized session intervals, native build/signatures, 38,080 original-instruction comparisons, 20,000 original RNG outputs and 320 original worker passes pass. Automated preview-launch inspection timed out; visual validation remains pending. Font-ROM pixels, exact DAC colors and kernel scheduling/timer jitter remain approximation boundaries.
 
-# v0.3.0 — lean cleanup and Faithful VGA presentation
+## v0.3.0 — lean cleanup and Faithful VGA presentation
 
 - Completely removed Eat the Desktop, wallpaper lookup and decoding, image orientation controls, erosion masks, wallpaper logging and performance diagnostics tied to wallpaper rendering.
 - Fixed Faithful display geometry: exactly 80×25 text cells, 8×16 pixel glyph proportions, centered in a logical 640×480 (4:3) VGA viewport with a 640×400 text raster and 40 virtual blank scanlines above/below. Uniform scale across screen aspect ratios; no widescreen stretching.

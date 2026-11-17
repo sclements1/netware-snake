@@ -14,6 +14,8 @@ REPORT="${1:-$PWD/NetWareSnake-diagnostics-$(date +%Y%m%d-%H%M%S).txt}"
   if [[ -f "$BUNDLE" ]]; then
     printf 'Installed saver version: '
     /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$BUNDLE" || true
+    printf 'Installed saver build: '
+    /usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$BUNDLE" || true
   else
     echo 'Installed saver: not found'
   fi

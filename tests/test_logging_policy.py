@@ -32,9 +32,9 @@ class ProductionPolicyTests(unittest.TestCase):
         for name in ('Info.plist','Info.preview.plist'):
             with (ROOT/'macos'/name).open('rb') as file:
                 info=plistlib.load(file)
-            self.assertEqual(info['CFBundleShortVersionString'],'0.7.0')
-            self.assertEqual(info['CFBundleVersion'],'16')
-        self.assertIn('0.7.0',(ROOT/'build-macos.sh').read_text())
-        self.assertIn('0.7.0',(ROOT/'install-macos.sh').read_text())
+            self.assertEqual(info['CFBundleShortVersionString'],'0.7.3')
+            self.assertEqual(info['CFBundleVersion'],'19')
+        self.assertIn('0.7.3',(ROOT/'build-macos.sh').read_text())
+        self.assertIn('0.7.3',(ROOT/'install-macos.sh').read_text())
 
 if __name__=='__main__':unittest.main()

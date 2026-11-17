@@ -25,6 +25,7 @@
     self.window.title=@"NetWare Snake — Preview";self.window.delegate=self;
     self.snake=[[NetWareSnakeView alloc] initWithFrame:NSMakeRect(0,0,rect.size.width,rect.size.height)
         isPreview:NO defaults:self.previewDefaults];
+    self.snake.unifiedOverview=YES;
     self.snake.autoresizingMask=NSViewWidthSizable|NSViewHeightSizable;self.window.contentView=self.snake;
     [self.window center];[self.window makeKeyAndOrderFront:nil];[self.snake startAnimation];
     self.displayWindows=[NSMutableArray new];

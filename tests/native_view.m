@@ -20,6 +20,29 @@
 @property(copy) NSDictionary *deviceDescription;
 @end
 @implementation NWFixtureScreen
+- (NSColorSpace *)colorSpace {return NSColorSpace.sRGBColorSpace;}
+- (CGFloat)backingScaleFactor {return 1;}
+@end
+@interface NWRenderFixtureView : NetWareSnakeView
+@end
+@implementation NWRenderFixtureView
+- (void)drawRect:(NSRect)rect {
+    [self.window setValue:@YES forKey:@"useFixtureScreen"];
+    @try {[super drawRect:rect];}
+    @finally {[self.window setValue:@NO forKey:@"useFixtureScreen"];}
+}
+- (void)applyPreferences {} // Rendering fixture injects a synthetic shared world.
+@end
+@interface NWFixtureWindow : NSWindow
+@property(strong) NSScreen *fixtureScreen;
+@property NSRect fixtureGlobalFrame;
+@property BOOL useFixtureScreen;
+@end
+@implementation NWFixtureWindow
+- (NSScreen *)screen {return _useFixtureScreen?_fixtureScreen:[super screen];}
+- (NSRect)convertRectToScreen:(NSRect)rect {
+    return NSIsEmptyRect(_fixtureGlobalFrame)?[super convertRectToScreen:rect]:_fixtureGlobalFrame;
+}
 @end
 static nw_snake *Core(NetWareSnakeView *view) {
     Ivar ivar=class_getInstanceVariable(NetWareSnakeView.class,"_core");
@@ -52,6 +75,91 @@ static BOOL HasBlue(NSBitmapImageRep *bitmap) {
         if(c.blueComponent>0.9 && c.redComponent<0.1)return YES;
     }
     return NO;
+}
+static NSImage *SolidImage(NSColor *color) {
+    NSImage *image=[[NSImage alloc] initWithSize:NSMakeSize(64,64)];
+    [image lockFocus];[color setFill];NSRectFill(NSMakeRect(0,0,64,64));[image unlockFocus];return image;
+}
+static NSUInteger CountPrimary(NSBitmapImageRep *bitmap,int channel) {
+    NSUInteger count=0;
+    for(NSInteger y=0;y<bitmap.pixelsHigh;y+=4)for(NSInteger x=0;x<bitmap.pixelsWide;x+=4){
+        NSColor *c=[[bitmap colorAtX:x y:y] colorUsingColorSpace:NSColorSpace.deviceRGBColorSpace];
+        CGFloat rgb[]={c.redComponent,c.greenComponent,c.blueComponent};
+        if(rgb[channel]>0.6 && rgb[channel]>3*fmax(rgb[(channel+1)%3],rgb[(channel+2)%3]))count++;
+    }
+    return count;
+}
+static void TestRemoteFrameCoordinates(void) {
+    NWFixtureScreen *main=[NWFixtureScreen new],*left=[NWFixtureScreen new],*right=[NWFixtureScreen new];
+    main.frame=NSMakeRect(0,0,1512,982);main.deviceDescription=@{@"NSScreenNumber":@1};
+    left.frame=NSMakeRect(-1231,982,1920,1080);left.deviceDescription=@{@"NSScreenNumber":@2};
+    right.frame=NSMakeRect(689,982,1920,1080);right.deviceDescription=@{@"NSScreenNumber":@3};
+    NSArray *screens=@[main,left,right];
+    // Host window frames copied verbatim from the user's build-18 report.
+    NSRect upperLeft=NSMakeRect(-1231,-1080,1920,1080),upperRight=NSMakeRect(689,-1080,1920,1080);
+    NSCAssert(NWScreenForDesktopView(upperLeft,nil,screens)==(id)main,@"Fixture no longer reproduces build 18's fallback");
+    NSCAssert(NWScreenForRemoteDesktopView(upperLeft,nil,screens)==(id)left,@"Remote upper-left selected main display");
+    NSCAssert(NWScreenForRemoteDesktopView(upperRight,nil,screens)==(id)right,@"Remote upper-right selected main display");
+    NSCAssert(NWScreenForRemoteDesktopView(main.frame,(id)main,screens)==(id)main,@"Remote main display changed");
+    // Preserve native Cocoa frames, including the working side-by-side layout.
+    left.frame=NSMakeRect(-1920,-98,1920,1080);right.frame=NSMakeRect(-3840,-98,1920,1080);
+    NSCAssert(NWScreenForRemoteDesktopView(left.frame,(id)left,screens)==(id)left,@"Horizontal left display regressed");
+    NSCAssert(NWScreenForRemoteDesktopView(right.frame,(id)right,screens)==(id)right,@"Horizontal right display regressed");
+    puts("PASS remote host coordinates: recorded null-screen T frames, distinct upper crops, main display and horizontal layout");
+}
+static void TestTLayout(NSUserDefaults *defaults) {
+    NWFixtureScreen *left=[NWFixtureScreen new],*right=[NWFixtureScreen new],*bottom=[NWFixtureScreen new];
+    left.frame=NSMakeRect(-1280,720,1280,720);left.deviceDescription=@{@"NSScreenNumber":@101};
+    right.frame=NSMakeRect(0,720,1280,720);right.deviceDescription=@{@"NSScreenNumber":@102};
+    bottom.frame=NSMakeRect(-640,0,1280,720);bottom.deviceDescription=@{@"NSScreenNumber":@103};
+    NSArray *screens=@[left,right,bottom];
+    NWFixtureWindow *window=[[NWFixtureWindow alloc] initWithContentRect:NSMakeRect(0,0,640,360)
+        styleMask:NSWindowStyleMaskBorderless backing:NSBackingStoreBuffered defer:NO];
+    window.releasedWhenClosed=NO;[window orderFront:nil];
+    Method method=class_getClassMethod(NSScreen.class,@selector(screens));
+    IMP fixture=imp_implementationWithBlock(^NSArray *(id receiver){(void)receiver;return screens;});
+    IMP original=method_getImplementation(method);
+    NSMutableDictionary *wallpapers=[NSMutableDictionary new];
+    NSArray *colors=@[NSColor.redColor,NSColor.greenColor,NSColor.blueColor];
+    for(NSUInteger i=0;i<3;i++){
+        NWFixtureScreen *screen=screens[i];
+        wallpapers[screen.deviceDescription[@"NSScreenNumber"]]=[[NWWallpaperSnapshot alloc]
+            initWithImage:SolidImage(colors[i]) options:@{NSWorkspaceDesktopImageScalingKey:@(NSImageScaleAxesIndependently)} canvasSize:screen.frame.size];
+    }
+    Method snapshots=class_getClassMethod(NWWallpaperSnapshot.class,@selector(snapshotsForScreens:));
+    IMP fakeSnapshots=imp_implementationWithBlock(^NSDictionary *(id receiver,NSArray *ignored){(void)receiver;(void)ignored;return wallpapers;});
+    IMP originalSnapshots=method_setImplementation(snapshots,fakeSnapshots);
+    for(NSInteger mode=0;mode<3;mode++){
+        NWSettings *settings=[NWSettings new];settings.mode=mode;settings.screenMode=NWScreenModeUnifiedDesktop;settings.eatDesktop=YES;
+        NSObject *participant=[NSObject new];
+        method_setImplementation(method,fixture);
+        NWUnifiedDesktopSession *world=[NWUnifiedDesktopSession acquireForSettings:settings participant:participant];
+        method_setImplementation(method,original);
+        NSCAssert(world,@"Synthetic T-layout world failed");
+        NetWareSnakeView *view=[[NWRenderFixtureView alloc] initWithFrame:NSMakeRect(0,0,640,360) isPreview:NO defaults:defaults];
+        [view setValue:settings forKey:@"settings"];[view setValue:world forKey:@"unified"];
+        window.contentView=view;[window orderFront:nil];
+        for(NSUInteger target=0;target<3;target++){
+            NWFixtureScreen *screen=screens[target];
+            window.fixtureGlobalFrame=bottom.frame; // All remote frames still describe the main display.
+            window.fixtureScreen=(NSScreen *)screen;
+            NSCAssert(NWScreenForDesktopView(bottom.frame,(NSScreen *)screen,screens)==(id)screen,@"Stale geometry overrode host display identity");
+            NSCAssert(NWScreenForDesktopView(screen.frame,nil,screens)==(id)screen,@"Coordinate fallback failed without host identity");
+            [[NSNotificationCenter defaultCenter] postNotificationName:NSWindowDidChangeScreenNotification object:window];
+            [view setNeedsDisplay:YES];NSBitmapImageRep *bitmap=Render(view);
+            [[bitmap representationUsingType:NSBitmapImageFileTypePNG properties:@{}] writeToFile:[NSString stringWithFormat:@"build/tests/t-layout-mode%ld-display%lu.png",(long)mode,(unsigned long)target] atomically:YES];
+            NSCAssert(CountPrimary(bitmap,(int)target)>1000,@"Display crop missing its own wallpaper");
+            NSCAssert(CountPrimary(bitmap,(int)((target+1)%3))==0 && CountPrimary(bitmap,(int)((target+2)%3))==0,
+                @"T-layout leaked another display into this screen");
+        }
+        // The windowed preview deliberately retains the complete T overview.
+        view.unifiedOverview=YES;[view setNeedsDisplay:YES];NSBitmapImageRep *overview=Render(view);
+        for(int channel=0;channel<3;channel++)NSCAssert(CountPrimary(overview,channel)>100,@"Overview lost a display");
+        [world detachParticipant:participant];[window orderOut:nil];
+    }
+    method_setImplementation(snapshots,originalSnapshots);imp_removeBlock(fakeSnapshots);
+    method_setImplementation(method,original);imp_removeBlock(fixture);
+    puts("PASS T-layout rendering: all three modes, host display identity over stale remote frames, coordinate fallback, half-size host views, isolated display crops and explicit overview");
 }
 int main(int argc,char **argv) {
     @autoreleasepool {
@@ -187,6 +295,8 @@ int main(int argc,char **argv) {
             method_setImplementation(screensMethod,originalIMP);
             imp_removeBlock(fixtureIMP);
         }
+        TestRemoteFrameCoordinates();
+        TestTLayout(defaults);
         [defaults removePersistentDomainForName:name];
         puts("PASS native view: custom color, both-mode geometry/wallpaper/gaps, Fixed 32 simulation, measured restore, historical origin and shared worlds");
     }

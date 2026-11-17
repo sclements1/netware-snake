@@ -140,8 +140,8 @@ static NSColor *NWAttributeColor(NSUInteger attribute) {
             title:@"Save" action:@selector(saveSettings:) identifier:@"save"];
         save.keyEquivalent = @"\r";
         NSBundle *bundle = [NSBundle bundleForClass:[NWConfigurationController class]];
-        NSString *version = [bundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"0.7.0";
-        NSString *build = [bundle objectForInfoDictionaryKey:@"CFBundleVersion"] ?: @"16";
+        NSString *version = [bundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"0.7.3";
+        NSString *build = [bundle objectForInfoDictionaryKey:@"CFBundleVersion"] ?: @"19";
         NSTextField *footer = NWLabel(content, [NSString stringWithFormat:@"NetWare Snake v%@ · build %@", version, build],
             NSMakeRect(24, 14, 612, 20), YES);
         footer.alignment = NSTextAlignmentCenter; footer.textColor = NSColor.tertiaryLabelColor;
