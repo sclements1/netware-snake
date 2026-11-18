@@ -83,7 +83,7 @@ For a visual check, open Settings and confirm **v0.7.3 · build 19**. Check the 
 
 ## Distribution preparation
 
-Run `./tools/release-macos.sh development` for an offline, clearly labeled development DMG. The [release procedure](docs/MACOS-RELEASE.md) covers Developer ID signing, staged Apple notarization, ticket stapling and clean-Mac acceptance tests. Signing and notarization remain pending; the current artifacts are development builds.
+Run `./tools/release-macos.sh development` for an offline, clearly labeled development DMG. The [release procedure](docs/MACOS-RELEASE.md) covers Developer ID signing, staged Apple notarization, ticket stapling and clean-Mac acceptance tests. The [v0.7.3 release](https://github.com/sclements1/netware-snake/releases/tag/v0.7.3) provides a Developer ID signed, notarized and stapled DMG for Apple Silicon (macOS 13+). User testing passed on multiple machines; clean-machine offline testing was skipped. See the [validation record](docs/MACOS-RELEASE-TESTING.md) for details.
 
 ## Unified Desktop diagnostics
 

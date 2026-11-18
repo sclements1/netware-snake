@@ -19,7 +19,7 @@
 
 - Automated checks: 32 portable tests, native settings/rendering/CPU/wallpaper fixtures, synthetic 128-CPU Modern tests, sanitizer stress and bundle signatures pass.
 - User-reported checks: new installation, upgrade, removal, two- and three-display horizontal layouts, and the three-display T arrangement. The T-layout pass was confirmed with build 19 after restarting the cached host.
-- Bundles are development/ad-hoc signed. Developer ID signing, Apple notarization and clean-account offline distribution checks remain pending.
+- Release DMG and bundles are Developer ID signed and Apple notarized; preview and DMG tickets are stapled and validated. User testing passed on multiple machines. Clean-machine offline testing was skipped by user decision.
 - Unified animation remains process-local. The tested host served all three displays in one process; separate-process synchronization is not implemented.
 
 Development builds 17–18 were intermediate T-layout fixes and are superseded by build 19. See [the validation record](docs/MACOS-RELEASE-TESTING.md) for the evidence boundary and [the release procedure](docs/MACOS-RELEASE.md) for distribution steps.
