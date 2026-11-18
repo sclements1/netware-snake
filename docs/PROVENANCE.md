@@ -14,7 +14,9 @@ and other third-party software are not included or relicensed by this project.
 - **3.12:** `tests/python_reference.py` documents a static reconstruction of
   MONITOR.NLM v1.76 (1993), including code/data-relative offsets. The portable C
   engine is checked against that reference. This checkout does not contain the
-  original 3.12 image or an original-instruction runner for it.
+  original 3.12 image or an original-instruction runner for it. Recovery details,
+  controlled-load video evidence and the 41,600-pass parity boundary are recorded
+  in `docs/NETWARE312.md` in the source repo.
 - **4.2:** the portable engine reconstructs behavior from the unpacked MONITOR
   image identified by SHA-256
   `0a1940dbf942abfb02db4c1690336b85454e7efd0656ea3a36cdace2f13f6c69`.
