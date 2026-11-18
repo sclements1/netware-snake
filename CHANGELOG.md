@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.7.4 — Development cleanup (build 20, unreleased)
+## v0.7.4 — Quieter diagnostics and public release preparation (build 20)
 
 - Make detailed display mapping diagnostics opt-in and omit raw object addresses.
 - Clarify current modes, historical research provenance, signing status and project independence.
