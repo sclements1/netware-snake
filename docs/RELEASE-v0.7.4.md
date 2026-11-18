@@ -1,4 +1,4 @@
-NetWare Snake v0.7.4 (build 20) reduces routine diagnostic logging and improves documentation and release safeguards.
+NetWare Snake v0.7.4 (build 20) is Developer ID signed, Apple notarized and stapled. It reduces routine diagnostic logging and improves documentation and release safeguards.
 
 ## Download and install
 
@@ -24,6 +24,14 @@ Original proprietary binaries are not distributed. Exact font-ROM pixels, DAC co
 
 ## Validation and known limits
 
-Automated checks cover 33 portable tests, native settings/rendering fixtures, synthetic 128-CPU Modern operation, sanitizer stress and bundle signatures. History secret scanning also passes. Signing, notarization and final artifact/installation results are recorded before publication.
+All 33 portable tests, native settings/rendering fixtures, synthetic 128-CPU Modern tests, sanitizer stress and signature checks passed. History secret scanning also passed. Apple accepted the bundles and final DMG without issues; preview and DMG tickets validate, and local Gatekeeper assessments accept both the preview and DMG. The signed build 20 installation and screen saver activation passed the user check, including the Options version/build footer.
 
 Unified Desktop sharing remains within one host process; separate screen saver processes do not synchronize. Clean-machine offline testing was previously skipped by user decision and is not claimed as passed. Broader display configurations and sleep/wake behavior remain outside the verified field coverage.
+
+Source used to build the binaries: `c2a7795dca836d8a90b3e84c6f435de83319a2c6`.
+
+Final stapled DMG SHA-256:
+
+```text
+f1b18d12a24d2cd55a9ce1ae4723edc64853d84b3f6e700ce4562f7c8deb43da
+```

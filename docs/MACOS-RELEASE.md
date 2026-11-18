@@ -59,7 +59,7 @@ The two notarization stages let the preview carry its own ticket after being
 copied out of the DMG. The DMG is the final distribution container for the saver.
 The scripts stop on errors, retain logs and submission IDs, and refuse to
 promote a development artifact or an artifact whose checksum has changed.
-The full Apple-backed flow passed for v0.7.3/build 19; see the release validation
+The full Apple-backed flow passed for v0.7.3/build 19 and v0.7.4/build 20; see the release validation
 record. Each new artifact still requires its own acceptance and validation.
 The payload must not be changed between prepare and package.
 
@@ -96,7 +96,7 @@ Record completed checks and any explicitly accepted skips before creating a
 versioned GitHub Release. For v0.7.3, clean-machine offline testing was explicitly
 skipped; it must not be described as passed. Attach
 **only** the finalized DMG, matching .sha256 file, and suitable release notes.
-Use a new version/build whenever executable content changes after a published build. The current development build is v0.7.4/build 20; the published signed release is v0.7.3/build 19.
+Use a new version/build whenever executable content changes after a published build. The current signed release is v0.7.4/build 20; v0.7.3/build 19 remains available for rollback.
 Do not silently replace old published assets. Do not upload staging ZIPs,
 Keychain exports, notary credentials or the local signing environment.
 Signing/packaging changes in this checkout do not change the animation version.

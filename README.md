@@ -1,6 +1,6 @@
 # NetWare Snake for macOS
 
-A native macOS screensaver and standalone preview with researched NetWare 3.12 and NetWare 4.2 simulations. The current development checkout is **v0.7.4 / build 20**. The signed download is [v0.7.3 / build 19](https://github.com/sclements1/netware-snake/releases/tag/v0.7.3) for Apple Silicon, macOS 13+.
+A native macOS screensaver and standalone preview with researched NetWare 3.12 and NetWare 4.2 simulations. The current version is **v0.7.4 / build 20**. The signed download is [v0.7.4 / build 20](https://github.com/sclements1/netware-snake/releases/tag/v0.7.4) for Apple Silicon, macOS 13+.
 
 An independent reconstruction, unaffiliated with Novell or the owners of the NetWare name. See [provenance](docs/PROVENANCE.md) for research sources and implementation boundaries.
 
@@ -79,13 +79,13 @@ The installer checks **v0.7.4/build 20** before replacing the saver and backs up
 ./tools/run-macos-tests.sh      # native fixtures, sanitizers, bundles and signatures
 ```
 
-The automated suite covers portable tests, native settings and rendering fixtures, per-CPU sampling, wallpaper consumption, synthetic 128-CPU Modern operation, sanitizer stress and signature verification. User-reported installation and multi-display results, plus pending distribution checks, are maintained in [the release validation record](docs/MACOS-RELEASE-TESTING.md).
+The automated suite covers portable tests, native settings and rendering fixtures, per-CPU sampling, wallpaper consumption, synthetic 128-CPU Modern operation, sanitizer stress and signature verification. User-reported installation and multi-display results, plus pending distribution checks, are maintained in [the release validation record](docs/MACOS-RELEASE-TESTING-v0.7.4.md).
 
 For a visual check, open Settings and confirm **v0.7.4 · build 20**. Check the shared controls and color choices, switch to 4.2 and back before saving, and verify Restore Defaults followed by Cancel leaves saved settings unchanged. In Unified desktop mode, use Command-Shift-F to inspect display seams and Escape to return. With Eat the desktop enabled, verify the wallpaper remains static and the visited trail becomes black. Finally check 4.2's center startup, colors, per-CPU response, and 31/32 cap on a host with enough logical CPUs. If the system saver retains an old build, quit System Settings and restart the Mac before retesting. The host can cache an older loaded bundle even after replacement.
 
 ## Distribution preparation
 
-Run `./tools/release-macos.sh development` for an offline, clearly labeled development DMG. The [release procedure](docs/MACOS-RELEASE.md) covers Developer ID signing, staged Apple notarization, ticket stapling and clean-Mac acceptance tests. The [v0.7.3 release](https://github.com/sclements1/netware-snake/releases/tag/v0.7.3) provides a Developer ID signed, notarized and stapled DMG for Apple Silicon (macOS 13+). User testing passed on multiple machines; clean-machine offline testing was skipped. See the [validation record](docs/MACOS-RELEASE-TESTING.md) for details.
+Run `./tools/release-macos.sh development` for an offline, clearly labeled development DMG. The [release procedure](docs/MACOS-RELEASE.md) covers Developer ID signing, staged Apple notarization, ticket stapling and clean-Mac acceptance tests. The [v0.7.4 release](https://github.com/sclements1/netware-snake/releases/tag/v0.7.4) provides a Developer ID signed, notarized and stapled DMG for Apple Silicon (macOS 13+). Build 20 passed the signed installation/activation check; v0.7.3 was previously tested on multiple machines. Clean-machine offline testing remains unverified. See the [validation record](docs/MACOS-RELEASE-TESTING-v0.7.4.md) for details.
 
 ## Unified Desktop diagnostics
 
