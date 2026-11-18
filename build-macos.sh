@@ -45,9 +45,10 @@ codesign --force --sign - "$APP"
 # Fail the build unless both bundles contain their expected binaries and metadata.
 [[ -s "$BUNDLE/Contents/MacOS/NetWareSnake" ]]
 [[ -s "$APP/Contents/MacOS/NetWareSnakePreview" ]]
-[[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$BUNDLE/Contents/Info.plist")" == "0.7.3" ]]
-[[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$BUNDLE/Contents/Info.plist")" == "19" ]]
-[[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")" == "0.7.3" ]]
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$BUNDLE/Contents/Info.plist")" == "0.7.4" ]]
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$BUNDLE/Contents/Info.plist")" == "20" ]]
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")" == "0.7.4" ]]
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP/Contents/Info.plist")" == "20" ]]
 echo
 printf 'Built: %s\n' "$BUNDLE"
 printf 'To install safely after quitting System Settings: ./install-macos.sh\n'

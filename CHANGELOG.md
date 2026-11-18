@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.7.4 — Development cleanup (build 20, unreleased)
+
+- Make detailed display mapping diagnostics opt-in and omit raw object addresses.
+- Clarify current modes, historical research provenance, signing status and project independence.
+- Add contributor/security reporting guidance, local secret checks and read-only CI for portable tests and history scanning.
+- Expand ignore rules for local signing material, environment files, diagnostics and proprietary reference inputs.
+- Reject dirty checkouts before signed release preparation; keep future distribution documentation self-contained.
+- Reformat host adapters and Python research/release tooling without changing recovered algorithms.
+- Preserve the published signed v0.7.3/build 19 artifact and existing commit identities.
+- Validation: 33 portable tests, native fixtures, sanitizer stress and bundle signature checks pass; Gitleaks reports no secrets in reachable history or tracked changes.
+
 ## v0.7.3 — Unified Desktop and release preparation (build 19)
 
 ### Unified Desktop

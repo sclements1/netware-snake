@@ -3,6 +3,7 @@
 The only source of snake motion/history/shading is netware312_reference.Snake,
 which is an unchanged copy of the binary-derived v1.76 research core.
 """
+
 from dataclasses import dataclass
 from typing import Dict, Tuple
 
@@ -15,11 +16,11 @@ BAND_TARGETS = (5, 17, 28, 44, 75, 44, 28, 17, 5)
 
 def band(cpu):
     if not 0 <= cpu <= 100:
-        raise ValueError('CPU utilization outside 0-100')
+        raise ValueError("CPU utilization outside 0-100")
     for index, (lo, hi, spacing) in enumerate(BANDS, start=1):
         if lo <= cpu <= hi:
             return index, spacing
-    raise AssertionError('No CPU band')
+    raise AssertionError("No CPU band")
 
 
 @dataclass(frozen=True)
@@ -38,6 +39,7 @@ class SnakeSession:
     this class delegates all state transitions to the unmodified Snake.update().
     Pre-pass snapshots expose paint events without patching its logic.
     """
+
     def __init__(self, seed=0):
         self.core = Snake(seed=seed)
         self.cpu = 0
@@ -65,8 +67,9 @@ class SnakeSession:
             if self.core.xs[slot] < 81:
                 gen = self.generations[slot]
                 assert gen is not None, (stage, slot)
-                self.events.append(PaintEvent(stage, slot, gen,
-                                              self.core.xs[slot], self.core.ys[slot]))
+                self.events.append(
+                    PaintEvent(stage, slot, gen, self.core.xs[slot], self.core.ys[slot])
+                )
         old_moves = self.core.moves
         old_screen = self.core.screen[:]
         self.core.update(cpu)  # binary-derived state transition: source of truth
@@ -81,7 +84,11 @@ class SnakeSession:
                 # Head/tail crossing: old tail erases a cell still occupied by
                 # a more recently generated live segment in faithful mode.
                 for gen, (x, y, stage) in self.active.items():
-                    if gen > event.generation and y == event.y and (abs(x-event.x) <= 1):
+                    if (
+                        gen > event.generation
+                        and y == event.y
+                        and (abs(x - event.x) <= 1)
+                    ):
                         self.crossing_erase_events += 1
                         break
                 self.active.pop(event.generation, None)
@@ -107,34 +114,34 @@ class SnakeSession:
                 continue
             pos = y * WIDTH + x
             result[pos] = glyph
-            result[pos+1] = glyph
+            result[pos + 1] = glyph
         self.enhanced_screen = result
 
-    def screen(self, mode='faithful'):
-        if mode == 'faithful':
+    def screen(self, mode="faithful"):
+        if mode == "faithful":
             return self.core.screen
-        if mode == 'overlap-aware':
+        if mode == "overlap-aware":
             return self.enhanced_screen
-        raise ValueError(f'Unknown display mode {mode!r}')
+        raise ValueError(f"Unknown display mode {mode!r}")
 
-    def metrics(self, mode='faithful'):
+    def metrics(self, mode="faithful"):
         screen = self.screen(mode)
         index, spacing = band(self.cpu)
         return {
-            'pass': self.core.step,
-            'elapsed_sim_s': round(self.core.step / SIM_HZ, 4),
-            'cpu_percent': self.cpu,
-            'band': index,
-            'passes_per_move': spacing,
-            'head_moves_total': self.core.moves,
-            'head_moved_this_pass': int(self.last_head_moved),
-            'raw_frame_changed': int(self.last_screen_changed),
-            'raw_visible_updates_total': self.raw_visible_updates,
-            'occupied_cells': sum(v != 32 for v in screen),
-            'head_x': self.core.x,
-            'head_y': self.core.y,
-            'heading': self.core.heading,
-            'history_write_slot': self.core.last_write,
-            'erase_crossings_total': self.crossing_erase_events,
-            'display_mode': mode,
+            "pass": self.core.step,
+            "elapsed_sim_s": round(self.core.step / SIM_HZ, 4),
+            "cpu_percent": self.cpu,
+            "band": index,
+            "passes_per_move": spacing,
+            "head_moves_total": self.core.moves,
+            "head_moved_this_pass": int(self.last_head_moved),
+            "raw_frame_changed": int(self.last_screen_changed),
+            "raw_visible_updates_total": self.raw_visible_updates,
+            "occupied_cells": sum(v != 32 for v in screen),
+            "head_x": self.core.x,
+            "head_y": self.core.y,
+            "heading": self.core.heading,
+            "history_write_slot": self.core.last_write,
+            "erase_crossings_total": self.crossing_erase_events,
+            "display_mode": mode,
         }

@@ -19,7 +19,7 @@ upgrade checks are manual; creating a DMG does not establish those results.
 A normal Gatekeeper rejection of an unnotarized development image is expected.
 Do not disable Gatekeeper or strip quarantine attributes to claim validation.
 
-## Once membership and signing access are restored
+## Signing and notarization
 
 1. Obtain a Developer ID Application certificate and private key in your local
    login Keychain. A Developer ID Installer certificate is unnecessary for a DMG
@@ -38,7 +38,8 @@ Do not disable Gatekeeper or strip quarantine attributes to claim validation.
 
 4. Run `./tools/release-macos.sh prepare`. It runs tests, builds, signs with a
    secure timestamp and hardened runtime, checks the team, and stages a signed
-   ZIP. Copy the output directory path; use it for each command below.
+   ZIP. Signed preparation requires a clean checkout; commit source changes first.
+   Copy the output directory path; use it for each command below.
 5. Run `./tools/release-macos.sh submit build/releases/DIRECTORY` to upload the
    signed ZIP. This explicitly transmits the compiled software and bundled docs
    to Apple's notarization service. It returns a submission ID without waiting.
@@ -58,8 +59,9 @@ The two notarization stages let the preview carry its own ticket after being
 copied out of the DMG. The DMG is the final distribution container for the saver.
 The scripts stop on errors, retain logs and submission IDs, and refuse to
 promote a development artifact or an artifact whose checksum has changed.
-Apple-backed stages remain unverified until valid credentials and the service
-are available. The payload must not be changed between prepare and package.
+The full Apple-backed flow passed for v0.7.3/build 19; see the release validation
+record. Each new artifact still requires its own acceptance and validation.
+The payload must not be changed between prepare and package.
 
 ## Clean-Mac acceptance checklist
 
@@ -90,9 +92,11 @@ not proof of a clean installation.
 
 ## Publishing
 
-Only after the checklist passes, create a versioned GitHub Release and attach
+Record completed checks and any explicitly accepted skips before creating a
+versioned GitHub Release. For v0.7.3, clean-machine offline testing was explicitly
+skipped; it must not be described as passed. Attach
 **only** the finalized DMG, matching .sha256 file, and suitable release notes.
-Use a new version/build whenever executable content changes after a published build. The current development build is v0.7.3/build 19.
+Use a new version/build whenever executable content changes after a published build. The current development build is v0.7.4/build 20; the published signed release is v0.7.3/build 19.
 Do not silently replace old published assets. Do not upload staging ZIPs,
 Keychain exports, notary credentials or the local signing environment.
 Signing/packaging changes in this checkout do not change the animation version.

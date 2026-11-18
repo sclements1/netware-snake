@@ -1,6 +1,6 @@
 # NetWare 4.2 Faithful: provenance and adapter choices
 
-Recovered from the user's unpacked NetWare 4.2 MONITOR.NLM (MON42U.NLM, SHA-256 `0a1940dbf942abfb02db4c1690336b85454e7efd0656ea3a36cdace2f13f6c69`). `core/nw4_snake.c` is the portable engine; `core/nw4_session.c` supplies modern host policy. Proprietary files are not distributed.
+Recovered from the research copy of unpacked NetWare 4.2 MONITOR.NLM (MON42U.NLM, SHA-256 `0a1940dbf942abfb02db4c1690336b85454e7efd0656ea3a36cdace2f13f6c69`). `core/nw4_snake.c` is the portable engine; `core/nw4_session.c` supplies modern host policy. Proprietary files are not distributed.
 
 ## Preserved instruction behavior
 
@@ -15,9 +15,9 @@ Recovered from the user's unpacked NetWare 4.2 MONITOR.NLM (MON42U.NLM, SHA-256 
 
 ## Explicit modern choices
 
-Represent the first min(host logical CPUs,31) processors by default. Enabling 32 raises only the cap, never synthesizes CPUs. macOS logical CPU counters replace NetWare utilization services. First readings establish a zero baseline; subsequent readings use wrap-safe per-state tick deltas. The saver creates no per-core affinity or stress workload.
+Represent the first min(host logical CPUs,31) processors by default. The detected-32 policy raises only the cap. The optional Fixed 32 policy synthesizes 32 snakes with simulated per-CPU loads. macOS logical CPU counters replace NetWare utilization services. First readings establish a zero baseline; subsequent readings use wrap-safe per-state tick deltas. The saver creates no per-core affinity or stress workload.
 
-Nominal 18.2 intervals/sec is supported by the startup video's approximately 0.2194-second inter-snake spacing and original four-delay rule. Exact kernel timing and scheduler jitter are not reproduced. Simultaneous updates run in ascending CPU index order. All objects initialize in index order before worker steps begin. Multi-display worlds are independent. Another activation clears the screen and palette assignment while preserving the world's shared random sequence; a fresh view/world represents a fresh module lifetime.
+Nominal 18.2 intervals/sec is supported by the startup video's approximately 0.2194-second inter-snake spacing and original four-delay rule. Exact kernel timing and scheduler jitter are not reproduced. Simultaneous updates run in ascending CPU index order. All objects initialize in index order before worker steps begin. 4:3 and Widescreen use independent per-display worlds; Unified Desktop shares one world within the host process. Another activation clears the screen and palette assignment while preserving the world's shared random sequence; a fresh view/world represents a fresh module lifetime.
 
 The renderer uses verified character codes with CP437-like density masks, conventional VGA RGB colors and the existing centered 640×480 logical presentation. Exact font-ROM pixels and DAC values remain unverified. These limitations affect pixel/timing equivalence, not validated state-machine behavior under a specified schedule.
 
@@ -35,4 +35,4 @@ PYTHON=/path/to/venv/bin/python tools/check-netware4-original.sh /path/to/MON42U
 
 Set `SERVER_IMAGE` and `NWSNUT_IMAGE` to matching unpacked images for real glyph-chain execution. Without these the harness explicitly uses mocked constants. Known source hashes: SERVERU `66b204a974efc5019946d238e74aba61f8c99db78364c6b86bb273c1f2748546`; NWSNUTU `eafbf1f29be65514bcf62f20e5932ad246b4e641627ff0e03472b1fbc81c7988`.
 
-On this restricted Apple Silicon host, stock Unicorn 2.1.4's denied cache-line sysctl falls back to a trapping register read. Included hash-guarded `prepare_unicorn_mac.py` can patch a LOCAL COPY of that library's host cache-line probe to a conservative 64-byte maintenance stride; set `LIBUNICORN_PATH` to that directory. Guest instructions and proprietary images are unchanged. Use stock Unicorn on normal unrestricted hosts. The integrated comparison used the real glyph chain and this documented host workaround.
+On restricted Apple Silicon hosts, stock Unicorn 2.1.4's denied cache-line sysctl falls back to a trapping register read. Included hash-guarded `prepare_unicorn_mac.py` can patch a local copy of that library's host cache-line probe to a conservative 64-byte maintenance stride; set `LIBUNICORN_PATH` to that directory. Guest instructions and proprietary images are unchanged. Use stock Unicorn on normal unrestricted hosts. The integrated comparison used the real glyph chain and this documented host workaround.

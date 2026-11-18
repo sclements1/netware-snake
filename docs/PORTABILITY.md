@@ -35,11 +35,11 @@ The lightweight core means even unwanted active instances should be comparativel
 ## Explicitly postponed
 
 - Linux and Windows adapters.
-- More than 32 snakes and custom CPU/core/cluster layouts.
+- More than 128 snakes and user-defined CPU/core/cluster layouts. Modern currently supports up to 128 logical CPUs with adaptive E/P/S sizing.
 - Metal, Direct3D, and advanced GPU pipelines.
 - Original VGA font ROM extraction or exact console DAC color reproduction.
-- Synchronization of snake *path* across separate physical displays (each display gets an independent console, sharing aggregate samples in 3.12 or per-CPU samples in 4.2).
-- Official Apple Developer ID signing/notarization for redistribution.
+- Synchronization between separate screen saver host processes. Unified Desktop already shares a world across participating displays within one process; 4:3 and Widescreen retain independent per-display consoles.
+- Automated signed release publishing. The v0.7.3 Apple Silicon DMG is already Developer ID signed, notarized and stapled using the local release procedure.
 
 
 ## NetWare 4.2 adapter

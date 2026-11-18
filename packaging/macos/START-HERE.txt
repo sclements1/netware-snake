@@ -49,3 +49,6 @@ HELP
 https://github.com/sclements1/netware-snake
 Include the macOS version, saver version/build, and display arrangement when
 reporting an issue. Do not include passwords or signing credentials.
+
+This is an independent project, unaffiliated with Novell or the owners of the
+NetWare name. See PROVENANCE.md for research and implementation boundaries.
