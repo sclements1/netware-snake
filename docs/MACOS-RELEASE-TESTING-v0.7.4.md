@@ -28,6 +28,7 @@ Last updated: 2026-11-18. Status: **Developer ID signed, notarized and stapled; 
 | Local Gatekeeper | PASS: preview execution and DMG open assessment; Notarized Developer ID |
 | Mounted DMG | PASS: read-only mount, expected payload, both bundles v0.7.4/build 20 and strict signature verification |
 | Final checksum | PASS: finalized DMG hash verified |
+| Public distribution | PASS: repository public; anonymous DMG and checksum downloads match the finalized hash; v0.7.4 is the latest release |
 
 Apple's log hashes the submitted DMG before stapling. The final SHA-256 above
 covers the stapled file. The saver is covered by Apple's acceptance and the
