@@ -88,16 +88,13 @@ def disk_image(folder, state, payload=None):
     if path.exists():
         raise RuntimeError("DMG already exists; start a fresh preparation directory.")
     run(
-        "hdiutil",
+        "diskutil",
+        "image",
         "create",
-        "-volname",
-        "NetWare Snake" + suffix,
-        "-srcfolder",
+        "from",
         payload or folder / "payload",
-        "-fs",
-        "HFS+",
-        "-format",
-        "UDZO",
+        "--volname",
+        "NetWare Snake" + suffix,
         path,
     )
     run("hdiutil", "verify", path)
